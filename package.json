@@ -1,0 +1,11 @@
+{
+  "name": "claude-visuals",
+  "version": "1.0.0",
+  "private": true,
+  "description": "チャットで生成した standalone なインタラクティブ可視化物を一元管理し、自動生成ギャラリーで公開する。",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-index.mjs"
+  },
+  "license": "MIT"
+}

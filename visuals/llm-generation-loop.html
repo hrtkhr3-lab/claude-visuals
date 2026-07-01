@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLMの自己回帰的生成ループ</title>
+<style>
+  :root{
+    --surface-0:#f5f4ee; --surface-1:#ecebe3; --surface-2:#ffffff;
+    --text-primary:#1f1e1b; --text-secondary:#5f5e5a; --text-muted:#8a8981;
+    --border:rgba(0,0,0,.10); --border-strong:rgba(0,0,0,.20);
+    --bg-accent:#e6f1fb; --text-accent:#185fa5; --border-accent:#378add;
+    --text-success:#3b6d11;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,"Roboto Mono",monospace;
+    --radius:8px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-0:#262624; --surface-1:#302f2d; --surface-2:#3a3a37;
+      --text-primary:#e9e7de; --text-secondary:#b1afa5; --text-muted:#85847c;
+      --border:rgba(255,255,255,.14); --border-strong:rgba(255,255,255,.26);
+      --bg-accent:#0c447c; --text-accent:#b5d4f4; --border-accent:#378add;
+      --text-success:#97c459;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font-family:var(--font-sans);line-height:1.7;
+    -webkit-font-smoothing:antialiased;padding:32px 16px}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:22px;font-weight:500;margin:0 0 4px}
+  .lede{font-size:14px;color:var(--text-secondary);margin:0 0 24px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+  .pipe{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 20px}
+  .pill{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--surface-1);color:var(--text-secondary);white-space:nowrap;transition:background .2s,color .2s}
+  .pill.on{background:var(--bg-accent);color:var(--text-accent)}
+  .sep{color:var(--text-muted);font-size:12px}
+
+  .field-label{font-size:13px;color:var(--text-secondary);margin:0 0 6px}
+  .ctx{background:var(--surface-1);border-radius:12px;padding:14px 16px;margin:0 0 20px;line-height:2;min-height:56px}
+  .tok{display:inline-block;padding:2px 8px;margin:2px 3px;border-radius:6px;background:var(--surface-2);border:.5px solid var(--border);font-family:var(--font-mono);font-size:14px}
+  .tok.pre{background:transparent;border:none;color:var(--text-muted);padding:2px 2px}
+  .tok.new{background:var(--bg-accent);border-color:var(--border-accent);color:var(--text-accent)}
+  .cursor{display:inline-block;width:2px;height:18px;background:var(--text-accent);vertical-align:-3px;animation:bl 1s steps(2) infinite}
+  @keyframes bl{50%{opacity:0}}
+
+  .row{display:flex;align-items:center;gap:10px;margin:6px 0;transition:opacity .25s}
+  .row.cut{opacity:.35}
+  .rtok{width:64px;text-align:right;font-family:var(--font-mono);font-size:14px;color:var(--text-primary)}
+  .track{flex:1;height:22px;background:var(--surface-1);border-radius:6px;overflow:hidden}
+  .fill{height:100%;background:var(--bg-accent);border-radius:6px;transition:width .3s,background .2s}
+  .row.cut .fill{background:var(--surface-1);border:.5px solid var(--border)}
+  .row.picked .fill{background:var(--text-accent)}
+  .rpct{width:44px;text-align:right;font-size:13px;color:var(--text-secondary)}
+  .hint{font-size:12px;color:var(--text-muted);margin-top:6px}
+
+  .ctrl{display:flex;align-items:center;gap:12px;margin:10px 0;font-size:13px;color:var(--text-secondary)}
+  .ctrl>label{min-width:78px}
+  .ctrl .val{min-width:44px;text-align:right;font-weight:500;color:var(--text-primary)}
+
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:2px;background:var(--border-strong);outline:none;margin:0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px var(--bg-accent)}
+
+  .btns{display:flex;gap:10px;margin:22px 0 0;align-items:center;flex-wrap:wrap}
+  button{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:14px;padding:8px 14px;border-radius:var(--radius);background:transparent;color:var(--text-primary);border:.5px solid var(--border-strong);cursor:pointer;transition:background .15s,transform .05s}
+  button:hover{background:var(--surface-1)}
+  button:active{transform:scale(.98)}
+  button svg{width:16px;height:16px}
+  .status{font-size:13px;color:var(--text-muted);margin-left:auto}
+  .done{padding:14px 0;color:var(--text-secondary);font-size:14px;display:flex;align-items:center;gap:8px}
+  .done svg{width:18px;height:18px;color:var(--text-success);flex:none}
+
+  footer{margin-top:28px;font-size:12px;color:var(--text-muted);border-top:.5px solid var(--border);padding-top:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LLMの自己回帰的生成ループ</h1>
+  <p class="lede">文脈 → 順伝播 → ロジット → softmax・温度 → top-p → サンプリング → 追加、を1トークンずつ実行する。温度とtop-pで分布の形と裾の打ち切りが変わる。</p>
+
+  <h2 class="sr-only">LLMの自己回帰的テキスト生成を、次トークンの確率分布・温度・top-pサンプリングを操作しながら1トークンずつ体験できるインタラクティブ図</h2>
+
+  <div class="pipe" id="pipe">
+    <span class="pill" data-s="0">文脈</span><span class="sep">→</span>
+    <span class="pill" data-s="1">順伝播</span><span class="sep">→</span>
+    <span class="pill" data-s="2">ロジット</span><span class="sep">→</span>
+    <span class="pill" data-s="3">softmax・温度</span><span class="sep">→</span>
+    <span class="pill" data-s="4">top-p</span><span class="sep">→</span>
+    <span class="pill" data-s="5">サンプリング</span><span class="sep">→</span>
+    <span class="pill" data-s="6">追加</span><span class="sep" style="font-size:14px">⟳</span>
+  </div>
+
+  <div class="field-label">文脈（これまでの系列）</div>
+  <div class="ctx" id="ctx"></div>
+
+  <div class="field-label" id="distlabel">次トークンの確率分布</div>
+  <div id="dist"></div>
+
+  <div class="ctrl">
+    <label for="temp">温度 (T)</label>
+    <input type="range" id="temp" min="0.1" max="2" step="0.1" value="1">
+    <span class="val" id="tempv">1.0</span>
+  </div>
+  <div class="ctrl">
+    <label for="topp">top-p</label>
+    <input type="range" id="topp" min="0.1" max="1" step="0.05" value="1">
+    <span class="val" id="toppv">1.00</span>
+  </div>
+
+  <div class="btns">
+    <button id="gen" aria-label="次のトークンを生成">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+      次のトークンを生成
+    </button>
+    <button id="reset" aria-label="リセット">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 11A8 8 0 1 0 18.4 16" stroke-linecap="round"/><path d="M20 4v7h-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      リセット
+    </button>
+    <span class="status" id="status">ステップ 0</span>
+  </div>
+
+  <footer>手書きの小さな遷移表による簡易モデル。実際のLLMではロジットは全語彙（数万〜十数万次元）に対して出る。仕組みの体験用。</footer>
+</div>
+
+<script>
+(function(){
+  var PROMPT = ["今日","の","天気","は"];
+  var EOS = "。";
+  var M = {
+    "__START__":[["晴れ",.40],["曇り",.24],["雨",.18],["雪",.09],["台風",.05],["きっと",.04]],
+    "きっと":[["晴れ",.45],["雨",.30],["曇り",.25]],
+    "晴れ":[["です",.45],["ですが",.20],["時々",.18],["のち",.17]],
+    "曇り":[["です",.38],["のち",.32],["ですが",.18],["時々",.12]],
+    "雨":[["です",.40],["でしょう",.30],["のち",.18],["ですが",.12]],
+    "雪":[["です",.45],["でしょう",.32],["ですが",.23]],
+    "台風":[["が",.45],["です",.30],["でしょう",.25]],
+    "のち":[["晴れ",.50],["曇り",.30],["雨",.20]],
+    "時々":[["雨",.45],["曇り",.33],["雪",.22]],
+    "です":[["。",.60],["ね",.18],["よ",.13],["か",.09]],
+    "ですが":[["風が",.45],["気温",.30],["湿度",.25]],
+    "でしょう":[["。",.65],["ね",.20],["か",.15]],
+    "風が":[["強い",.55],["冷たい",.45]],
+    "気温":[["が",.60],["は",.40]],
+    "湿度":[["が",.60],["は",.40]],
+    "強い":[["です",.70],["でしょう",.30]],
+    "冷たい":[["です",.70],["でしょう",.30]],
+    "が":[["高い",.40],["低い",.35],["強い",.25]],
+    "は":[["高い",.45],["低い",.40],["普通",.15]],
+    "高い":[["です",.75],["でしょう",.25]],
+    "低い":[["です",.75],["でしょう",.25]],
+    "普通":[["です",1.0]],
+    "ね":[["。",1.0]],"よ":[["。",1.0]],"か":[["。",1.0]]
+  };
+  var seq=[], done=false, step=0;
+  var ctx=document.getElementById('ctx'), dist=document.getElementById('dist'), status=document.getElementById('status');
+  var distlabel=document.getElementById('distlabel');
+
+  function keyOf(){ return seq.length? seq[seq.length-1] : "__START__"; }
+  function baseDist(){ var d=M[keyOf()]; return d? d.map(function(x){return {tok:x[0],p:x[1]};}) : null; }
+
+  function applyTemp(arr,T){
+    var s=arr.map(function(d){return Math.log(d.p)/T;});
+    var m=Math.max.apply(null,s);
+    var e=s.map(function(v){return Math.exp(v-m);});
+    var Z=e.reduce(function(a,b){return a+b;},0);
+    return arr.map(function(d,i){return {tok:d.tok,p:e[i]/Z};});
+  }
+  function sortDesc(a){ return a.slice().sort(function(x,y){return y.p-x.p;}); }
+  function keptByP(sorted,p){
+    var cum=0, k=0;
+    for(var i=0;i<sorted.length;i++){ cum+=sorted[i].p; k=i+1; if(cum>=p) break; }
+    return k;
+  }
+  function highlightStage(n){
+    var els=document.querySelectorAll('#pipe .pill');
+    for(var i=0;i<els.length;i++){ els[i].classList.toggle('on', +els[i].dataset.s===n); }
+  }
+
+  function renderCtx(){
+    var h='';
+    PROMPT.forEach(function(t){ h+='<span class="tok pre">'+t+'</span>'; });
+    seq.forEach(function(t,i){
+      var isNew=(i===seq.length-1);
+      h+='<span class="tok'+(isNew?' new':'')+'">'+t+'</span>';
+    });
+    if(!done) h+='<span class="cursor"></span>';
+    ctx.innerHTML=h;
+  }
+
+  function renderDist(){
+    if(done){
+      distlabel.textContent='生成完了（EOS に到達）';
+      dist.innerHTML='<div class="done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 12l5 5L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>「。」がサンプルされたのでループ終了。リセットして再実行できます。</div>';
+      return;
+    }
+    distlabel.textContent='次トークンの確率分布（T='+(+document.getElementById('temp').value).toFixed(1)+' 適用後）';
+    var T=+document.getElementById('temp').value, p=+document.getElementById('topp').value;
+    var arr=sortDesc(applyTemp(baseDist(),T));
+    var k=keptByP(arr,p);
+    var maxp=arr[0].p;
+    var h='';
+    arr.forEach(function(d,i){
+      var cut=i>=k;
+      var w=Math.round(d.p/maxp*100);
+      h+='<div class="row'+(cut?' cut':'')+'" data-tok="'+d.tok+'">'
+        +'<div class="rtok">'+d.tok+'</div>'
+        +'<div class="track"><div class="fill" style="width:'+w+'%"></div></div>'
+        +'<div class="rpct">'+Math.round(d.p*100)+'%</div></div>';
+    });
+    if(k<arr.length) h+='<div class="hint">薄い候補 = top-p ('+p.toFixed(2)+') で切り捨て。残りを再正規化してサンプリング。</div>';
+    dist.innerHTML=h;
+  }
+
+  function render(){ renderCtx(); renderDist(); status.textContent='ステップ '+step; }
+
+  function generate(){
+    if(done) return;
+    var T=+document.getElementById('temp').value, p=+document.getElementById('topp').value;
+    var arr=sortDesc(applyTemp(baseDist(),T));
+    var k=keptByP(arr,p);
+    var kept=arr.slice(0,k);
+    var Z=kept.reduce(function(a,b){return a+b.p;},0);
+    var r=Math.random()*Z, acc=0, chosen=kept[kept.length-1].tok;
+    for(var i=0;i<kept.length;i++){ acc+=kept[i].p; if(r<=acc){ chosen=kept[i].tok; break; } }
+
+    highlightStage(5);
+    var picked=dist.querySelector('.row[data-tok="'+chosen+'"]');
+    if(picked) picked.classList.add('picked');
+    step++;
+    setTimeout(function(){
+      seq.push(chosen);
+      if(chosen===EOS || !M[chosen]) done=true;
+      highlightStage(6);
+      render();
+      setTimeout(function(){ highlightStage(0); },400);
+    },420);
+  }
+
+  function reset(){ seq=[]; done=false; step=0; highlightStage(0); render(); }
+
+  document.getElementById('temp').addEventListener('input',function(){ document.getElementById('tempv').textContent=(+this.value).toFixed(1); renderDist(); });
+  document.getElementById('topp').addEventListener('input',function(){ document.getElementById('toppv').textContent=(+this.value).toFixed(2); renderDist(); });
+  document.getElementById('gen').addEventListener('click',generate);
+  document.getElementById('reset').addEventListener('click',reset);
+  reset();
+})();
+</script>
+</body>
+</html>
