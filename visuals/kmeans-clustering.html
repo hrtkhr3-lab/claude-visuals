@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>k-means クラスタリング：割り当てと更新の反復</title>
+<style>
+  :root{
+    --surface-0:#f5f4ee; --surface-1:#ecebe3; --surface-2:#ffffff;
+    --text-primary:#1f1e1b; --text-secondary:#5f5e5a; --text-muted:#8a8981;
+    --border:rgba(0,0,0,.10); --border-strong:rgba(0,0,0,.20);
+    --bg-accent:#e6f1fb; --text-accent:#185fa5; --border-accent:#378add;
+    --text-success:#3b6d11;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,"Roboto Mono",monospace;
+    --radius:8px;
+    --viz-c0:#c65133; --viz-c1:#1a9e9a; --viz-c2:#c79104;
+    --viz-c3:#5f9e34; --viz-c4:#8b5cd6; --viz-c5:#c2528f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-0:#262624; --surface-1:#302f2d; --surface-2:#3a3a37;
+      --text-primary:#e9e7de; --text-secondary:#b1afa5; --text-muted:#85847c;
+      --border:rgba(255,255,255,.14); --border-strong:rgba(255,255,255,.26);
+      --bg-accent:#0c447c; --text-accent:#b5d4f4; --border-accent:#378add;
+      --text-success:#97c459;
+      --viz-c0:#ef8261; --viz-c1:#3fc4bf; --viz-c2:#e0b23f;
+      --viz-c3:#8cc465; --viz-c4:#af8ae8; --viz-c5:#e87fba;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font-family:var(--font-sans);line-height:1.7;
+    -webkit-font-smoothing:antialiased;padding:32px 16px}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:22px;font-weight:500;margin:0 0 4px}
+  .lede{font-size:14px;color:var(--text-secondary);margin:0 0 24px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  .pipe{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 14px}
+  .pill{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--surface-1);color:var(--text-secondary);white-space:nowrap;transition:background .2s,color .2s}
+  .pill.on{background:var(--bg-accent);color:var(--text-accent)}
+  .sep{color:var(--text-muted);font-size:12px}
+  .ctrl{display:flex;align-items:center;gap:12px;margin:10px 0;font-size:13px;color:var(--text-secondary)}
+  .ctrl>label{min-width:78px}
+  .ctrl .val{min-width:44px;text-align:right;font-weight:500;color:var(--text-primary)}
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:2px;background:var(--border-strong);outline:none;margin:0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px var(--bg-accent)}
+  select{font:inherit;font-size:13px;flex:1;padding:6px 8px;border-radius:var(--radius);border:.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary)}
+  .btns{display:flex;gap:10px;margin:14px 0 0;align-items:center;flex-wrap:wrap}
+  button{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:14px;padding:8px 14px;border-radius:var(--radius);background:transparent;color:var(--text-primary);border:.5px solid var(--border-strong);cursor:pointer;transition:background .15s,transform .05s}
+  button:hover{background:var(--surface-1)}
+  button:active{transform:scale(.98)}
+  .status{font-size:13px;color:var(--text-muted);margin-left:auto}
+  footer{margin-top:28px;font-size:12px;color:var(--text-muted);border-top:.5px solid var(--border);padding-top:12px}
+
+  canvas{display:block;width:100%;background:var(--surface-2);border:.5px solid var(--border);border-radius:12px;touch-action:none;cursor:crosshair}
+  .phase{margin:14px 0 0;background:var(--bg-accent);color:var(--text-accent);border-radius:var(--radius);padding:8px 16px;font-size:14px;line-height:1.9}
+  .note{font-size:13px;color:var(--text-secondary);margin:14px 0 0;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>k-means クラスタリング：割り当てと更新の反復</h1>
+  <p class="lede">「①各点を最も近い中心に割り当てる → ②中心を自分の点たちの平均へ動かす」を繰り返すだけでグループが見つかる。距離のはかり方も切り替えられる。キャンバスをクリックすると点を追加。</p>
+
+  <h2 class="sr-only">k-meansの割り当てと中心更新の反復をステップ実行・自動再生で観察でき、ユークリッド・マンハッタン・コサインの距離切り替えもできるインタラクティブ図</h2>
+
+  <main id="widget">
+    <div class="pipe">
+      <span class="pill" id="pillInit">初期化</span><span class="sep">→</span>
+      <span class="pill" id="pillAssign">① 割り当て</span><span class="sep">→</span>
+      <span class="pill" id="pillUpdate">② 中心更新</span><span class="sep" style="font-size:14px">⟳</span>
+      <span class="pill" id="pillDone">収束</span>
+    </div>
+
+    <canvas id="cv" width="680" height="440" aria-label="k-meansクラスタリングの反復過程を示すキャンバス"></canvas>
+    <div class="phase" id="phaseBox" aria-live="polite">「点を生成」→「中心を初期化」→「1ステップ」の順にどうぞ</div>
+
+    <div class="ctrl">
+      <label for="kRange">クラスタ数 k</label>
+      <input type="range" id="kRange" min="2" max="6" step="1" value="3">
+      <span class="val" id="kLabel">3</span>
+    </div>
+    <div class="ctrl">
+      <label for="metric">距離</label>
+      <select id="metric">
+        <option value="euclid">ユークリッド距離（直線）</option>
+        <option value="manhattan">マンハッタン距離（碁盤の目）</option>
+        <option value="cosine">コサイン距離（角度・原点=中央）</option>
+      </select>
+    </div>
+
+    <div class="btns">
+      <button id="btnGen">🎲 点を生成</button>
+      <button id="btnInit">★ 中心を初期化</button>
+      <button id="btnStep">▸ 1ステップ</button>
+      <button id="btnAuto">▶ 自動再生</button>
+      <span class="status" id="statusBox"></span>
+    </div>
+
+    <p class="note">
+      ●=データ点（色=所属クラスタ）、★=クラスタ中心（セントロイド）。★がスーッと動くのが「中心の更新」で、動きがほぼ止まったら収束。
+      初期中心はランダムに選ぶので、「中心を初期化」を押し直すと違う結果になることがある（初期値依存性）。
+      距離を変えると境界も変わる：コサイン距離では原点から見た「向き」が同じ点が同じクラスタになる。
+    </p>
+  </main>
+
+  <footer>SSE（クラスタ内誤差平方和）は小さいほど凝集が良い。実務では k の選定にエルボー法やシルエットスコアを使う。</footer>
+</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+const ORIGIN={x:W/2,y:H/2};
+const VARS=['--viz-c0','--viz-c1','--viz-c2','--viz-c3','--viz-c4','--viz-c5'];
+
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let COLORS=[], C={};
+function palette(){
+  COLORS=VARS.map(css);
+  C={grid:css('--border'), muted:css('--text-muted'), unassigned:css('--border-strong'), surface:css('--surface-2')};
+}
+palette();
+if(window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change',palette);
+
+let points=[], centroids=[], k=3;
+let phase='init', iter=0, auto=false, lastAuto=0, metric='euclid';
+
+function dist(a,b){
+  if(metric==='euclid') return Math.hypot(a.x-b.x,a.y-b.y);
+  if(metric==='manhattan') return Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
+  const ax=a.x-ORIGIN.x, ay=a.y-ORIGIN.y, bx=b.x-ORIGIN.x, by=b.y-ORIGIN.y;
+  const na=Math.hypot(ax,ay), nb=Math.hypot(bx,by);
+  if(na<1e-9||nb<1e-9) return 1;
+  return 1-(ax*bx+ay*by)/(na*nb);
+}
+function randn(){ const u=Math.random(),v=Math.random(); return Math.sqrt(-2*Math.log(u+1e-12))*Math.cos(2*Math.PI*v); }
+
+function generatePoints(){
+  points=[];
+  const nBlobs=2+Math.floor(Math.random()*3);
+  for(let b=0;b<nBlobs;b++){
+    const cx=80+Math.random()*(W-160), cy=80+Math.random()*(H-160);
+    const s=24+Math.random()*26, n=22+Math.floor(Math.random()*20);
+    for(let i=0;i<n;i++){
+      points.push({x:Math.min(W-8,Math.max(8,cx+randn()*s)),
+                   y:Math.min(H-8,Math.max(8,cy+randn()*s)), cluster:-1});
+    }
+  }
+  resetState('点を生成しました。「中心を初期化」を押してください');
+}
+function initCentroids(){
+  if(points.length<k){ setPhase('点が足りません。先に点を生成するかクリックで追加してください'); return; }
+  const idx=new Set();
+  while(idx.size<k) idx.add(Math.floor(Math.random()*points.length));
+  centroids=[...idx].map(i=>({x:points[i].x,y:points[i].y,tx:points[i].x,ty:points[i].y}));
+  points.forEach(p=>p.cluster=-1);
+  iter=0; phase='assign';
+  setPhase('準備OK。「1ステップ」＝まず①割り当てから');
+}
+function resetState(msg){
+  centroids=[]; iter=0; phase='init'; auto=false; updateAutoBtn();
+  points.forEach(p=>p.cluster=-1);
+  setPhase(msg||'「中心を初期化」を押してください');
+  updateStatus();
+}
+function step(){
+  if(phase==='assign'){
+    points.forEach(p=>{
+      let best=-1,bd=Infinity;
+      centroids.forEach((c,i)=>{ const d=dist(p,c); if(d<bd){bd=d;best=i;} });
+      p.cluster=best;
+    });
+    phase='update';
+    setPhase('① 割り当て：各点を一番近い★の色に染めました（'+(iter+1)+'回目）');
+  } else if(phase==='update'){
+    let moved=0;
+    centroids.forEach((c,i)=>{
+      const mine=points.filter(p=>p.cluster===i);
+      if(mine.length){
+        const nx=mine.reduce((s,p)=>s+p.x,0)/mine.length;
+        const ny=mine.reduce((s,p)=>s+p.y,0)/mine.length;
+        moved=Math.max(moved,Math.hypot(nx-c.tx,ny-c.ty));
+        c.tx=nx; c.ty=ny;
+      }
+    });
+    iter++;
+    if(moved<0.5){
+      phase='done'; auto=false; updateAutoBtn();
+      setPhase('🎉 収束しました（'+iter+'回の反復）。中心はもう動きません');
+    } else {
+      phase='assign';
+      setPhase('② 中心の更新：★が自分の点たちの平均位置へ移動中（移動量 '+moved.toFixed(1)+'px）');
+    }
+  } else if(phase==='init'){
+    initCentroids();
+  }
+  updateStatus();
+}
+function sse(){
+  let s=0;
+  points.forEach(p=>{ if(p.cluster>=0) s+=dist(p,centroids[p.cluster])**2; });
+  return s;
+}
+function setPhase(html){
+  document.getElementById('phaseBox').innerHTML=html;
+  const on=id=>document.getElementById(id).classList.add('on');
+  ['pillInit','pillAssign','pillUpdate','pillDone'].forEach(id=>document.getElementById(id).classList.remove('on'));
+  if(phase==='init') on('pillInit');
+  else if(phase==='assign') on('pillAssign');
+  else if(phase==='update') on('pillUpdate');
+  else if(phase==='done') on('pillDone');
+}
+function updateStatus(){
+  const counts=centroids.map((c,i)=>points.filter(p=>p.cluster===i).length);
+  document.getElementById('statusBox').textContent=
+    '点 '+points.length+'　反復 '+iter+
+    (centroids.length?'　内訳 '+counts.join('/'):'')+
+    (centroids.length&&metric==='euclid'?'　SSE '+Math.round(sse()).toLocaleString():'');
+}
+
+function draw(t){
+  ctx.clearRect(0,0,W,H);
+  if(metric==='cosine'){
+    ctx.strokeStyle=C.grid; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(ORIGIN.x,0); ctx.lineTo(ORIGIN.x,H);
+    ctx.moveTo(0,ORIGIN.y); ctx.lineTo(W,ORIGIN.y); ctx.stroke();
+    ctx.fillStyle=C.muted; ctx.font='12px sans-serif';
+    ctx.fillText('原点（角度はここから測る）', ORIGIN.x+6, ORIGIN.y-6);
+  }
+  centroids.forEach(c=>{ c.x+=(c.tx-c.x)*0.08; c.y+=(c.ty-c.y)*0.08; });
+  ctx.lineWidth=1;
+  points.forEach(p=>{
+    if(p.cluster>=0){
+      const c=centroids[p.cluster];
+      ctx.save(); ctx.globalAlpha=.18;
+      ctx.strokeStyle=COLORS[p.cluster];
+      ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(c.x,c.y); ctx.stroke();
+      ctx.restore();
+    }
+  });
+  points.forEach(p=>{
+    ctx.fillStyle=p.cluster>=0?COLORS[p.cluster]:C.unassigned;
+    ctx.beginPath(); ctx.arc(p.x,p.y,4.5,0,7); ctx.fill();
+  });
+  centroids.forEach((c,i)=>star(c.x,c.y,12,COLORS[i]));
+  requestAnimationFrame(loop);
+}
+function star(x,y,r,color){
+  ctx.save(); ctx.translate(x,y); ctx.beginPath();
+  for(let i=0;i<10;i++){
+    const rr=i%2?r*0.45:r, a=Math.PI/5*i-Math.PI/2;
+    ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);
+  }
+  ctx.closePath();
+  ctx.fillStyle=color; ctx.fill();
+  ctx.lineWidth=2.5; ctx.strokeStyle=C.surface; ctx.stroke();
+  ctx.restore();
+}
+function loop(t){
+  if(auto&&phase!=='done'&&phase!=='init'&&t-lastAuto>900){ lastAuto=t; step(); }
+  draw(t);
+}
+requestAnimationFrame(loop);
+
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect();
+  points.push({x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height), cluster:-1});
+  if(phase==='done'){ phase='assign'; setPhase('点が増えたので再開できます'); }
+  updateStatus();
+});
+document.getElementById('kRange').addEventListener('input',e=>{
+  k=+e.target.value; document.getElementById('kLabel').textContent=k;
+  resetState('k='+k+' に変更。「中心を初期化」を押してください');
+});
+document.getElementById('metric').addEventListener('change',e=>{
+  metric=e.target.value;
+  resetState('距離を変更しました。「中心を初期化」からやり直してください');
+});
+document.getElementById('btnGen').onclick=generatePoints;
+document.getElementById('btnInit').onclick=initCentroids;
+document.getElementById('btnStep').onclick=()=>{ if(centroids.length) step(); else initCentroids(); };
+document.getElementById('btnAuto').onclick=()=>{
+  if(!centroids.length) initCentroids();
+  auto=!auto; updateAutoBtn();
+};
+function updateAutoBtn(){ document.getElementById('btnAuto').textContent=auto?'⏸ 停止':'▶ 自動再生'; }
+
+generatePoints(); updateStatus();
+})();
+</script>
+</body>
+</html>

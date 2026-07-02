@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ユークリッド距離：まっすぐ測る</title>
+<style>
+  :root{
+    --surface-0:#f5f4ee; --surface-1:#ecebe3; --surface-2:#ffffff;
+    --text-primary:#1f1e1b; --text-secondary:#5f5e5a; --text-muted:#8a8981;
+    --border:rgba(0,0,0,.10); --border-strong:rgba(0,0,0,.20);
+    --bg-accent:#e6f1fb; --text-accent:#185fa5; --border-accent:#378add;
+    --text-success:#3b6d11;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,"Roboto Mono",monospace;
+    --radius:8px;
+    --viz-line:#c65133; --viz-leg:#1a9e9a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-0:#262624; --surface-1:#302f2d; --surface-2:#3a3a37;
+      --text-primary:#e9e7de; --text-secondary:#b1afa5; --text-muted:#85847c;
+      --border:rgba(255,255,255,.14); --border-strong:rgba(255,255,255,.26);
+      --bg-accent:#0c447c; --text-accent:#b5d4f4; --border-accent:#378add;
+      --text-success:#97c459;
+      --viz-line:#ef8261; --viz-leg:#3fc4bf;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font-family:var(--font-sans);line-height:1.7;
+    -webkit-font-smoothing:antialiased;padding:32px 16px}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:22px;font-weight:500;margin:0 0 4px}
+  .lede{font-size:14px;color:var(--text-secondary);margin:0 0 24px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  .btns{display:flex;gap:10px;margin:16px 0 0;align-items:center;flex-wrap:wrap}
+  button{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:14px;padding:8px 14px;border-radius:var(--radius);background:transparent;color:var(--text-primary);border:.5px solid var(--border-strong);cursor:pointer;transition:background .15s,transform .05s}
+  button:hover{background:var(--surface-1)}
+  button:active{transform:scale(.98)}
+  footer{margin-top:28px;font-size:12px;color:var(--text-muted);border-top:.5px solid var(--border);padding-top:12px}
+
+  canvas{display:block;width:100%;background:var(--surface-2);border:.5px solid var(--border);border-radius:12px;touch-action:none;cursor:grab}
+  .formula{margin:16px 0 0;background:var(--bg-accent);color:var(--text-accent);border-radius:var(--radius);padding:10px 16px;font-size:15px;line-height:2;text-align:center}
+  .formula b{font-size:20px}
+  .note{font-size:13px;color:var(--text-secondary);margin:14px 0 0;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ユークリッド距離：まっすぐ測る</h1>
+  <p class="lede">2点を直線で結んだ長さ。ピタゴラスの定理 √(横²＋縦²) で決まる、いちばん基本の距離。点AとBをドラッグして動かせる。</p>
+
+  <h2 class="sr-only">2点をドラッグするとユークリッド距離の計算過程（直角三角形と平方根）がリアルタイムに更新されるインタラクティブ図</h2>
+
+  <main id="widget">
+    <canvas id="cv" width="680" height="440" aria-label="2点間のユークリッド距離を示すキャンバス"></canvas>
+    <div class="formula" id="formula" aria-live="polite"></div>
+    <div class="btns">
+      <button id="btnCircle">⭕ Aから同じ距離の点はどこ？</button>
+    </div>
+    <p class="note">
+      同じユークリッド距離の点を集めると<b>円</b>になる（マンハッタン距離だと◇、コサイン類似度だと原点からの放射線）。
+      k-means の標準の距離はこれ。差を2乗して足すので、1つの次元の大きなズレが距離を支配しやすい。
+    </p>
+  </main>
+
+  <footer>1マス = 1。数値はマス単位。関連：マンハッタン距離／コサイン類似度／k-means の各可視化物。</footer>
+</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height, GRID=40;
+let A={x:160,y:320}, B={x:480,y:140};
+let drag=null, circleAnim=-1;
+
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let C={};
+function palette(){ C={grid:css('--border'), ink:css('--text-primary'), leg:css('--viz-leg'), line:css('--viz-line'), muted:css('--text-muted')}; }
+palette();
+if(window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change',palette);
+
+const unit=px=>{ const s=(px/GRID).toFixed(2); return s.replace(/\.?0+$/,''); };
+
+function draw(t){
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle=C.grid; ctx.lineWidth=1;
+  for(let x=0;x<=W;x+=GRID){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke(); }
+  for(let y=0;y<=H;y+=GRID){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
+
+  const dx=B.x-A.x, dy=B.y-A.y, d=Math.hypot(dx,dy);
+
+  if(circleAnim>=0){
+    circleAnim=Math.min(1,circleAnim+0.02);
+    ctx.save(); ctx.globalAlpha=.6;
+    ctx.strokeStyle=C.line; ctx.lineWidth=2.5; ctx.setLineDash([6,6]);
+    ctx.beginPath(); ctx.arc(A.x,A.y,d*circleAnim,0,7); ctx.stroke();
+    ctx.restore(); ctx.setLineDash([]);
+    if(circleAnim>=1){
+      ctx.fillStyle=C.line; ctx.font='bold 13px sans-serif';
+      ctx.fillText('この円の上はぜんぶAから同じ距離', Math.max(8,A.x-100), Math.max(16,A.y-d-10));
+    }
+  }
+
+  ctx.strokeStyle=C.leg; ctx.lineWidth=2; ctx.setLineDash([5,5]);
+  ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle=C.leg; ctx.font='bold 13px sans-serif';
+  ctx.fillText('横 = '+unit(Math.abs(dx)), (A.x+B.x)/2-24, A.y+(dy>0?-8:18));
+  ctx.fillText('縦 = '+unit(Math.abs(dy)), Math.min(W-70,B.x+8), (A.y+B.y)/2+5);
+
+  ctx.strokeStyle=C.line; ctx.lineWidth=3.5;
+  ctx.setLineDash([12,7]); ctx.lineDashOffset=-(t/40);
+  ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle=C.line; ctx.font='bold 16px sans-serif';
+  ctx.fillText('d = '+unit(d), (A.x+B.x)/2+10, (A.y+B.y)/2-10);
+
+  point(A,'A'); point(B,'B');
+
+  document.getElementById('formula').innerHTML =
+    'd = √(横² ＋ 縦²) = √('+unit(Math.abs(dx))+'² ＋ '+unit(Math.abs(dy))+'²) = <b>'+unit(d)+'</b>';
+
+  requestAnimationFrame(draw);
+}
+function point(p,label){
+  ctx.beginPath(); ctx.arc(p.x,p.y,9,0,7);
+  ctx.fillStyle=C.ink; ctx.fill();
+  ctx.lineWidth=3; ctx.strokeStyle=css('--surface-2'); ctx.stroke();
+  ctx.fillStyle=C.ink; ctx.font='bold 15px sans-serif';
+  ctx.fillText(label,p.x-5,p.y-15);
+}
+requestAnimationFrame(draw);
+
+function pos(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)}; }
+cv.addEventListener('pointerdown',e=>{
+  const p=pos(e);
+  drag = Math.hypot(p.x-A.x,p.y-A.y)<28 ? A : Math.hypot(p.x-B.x,p.y-B.y)<28 ? B : null;
+  if(drag) cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove',e=>{
+  if(!drag) return;
+  const p=pos(e);
+  drag.x=Math.min(W-15,Math.max(15,p.x)); drag.y=Math.min(H-15,Math.max(15,p.y));
+  circleAnim = circleAnim>=0 ? 0 : -1;
+});
+cv.addEventListener('pointerup',()=>drag=null);
+document.getElementById('btnCircle').onclick=()=>{ circleAnim = circleAnim>=0 ? -1 : 0; };
+})();
+</script>
+</body>
+</html>

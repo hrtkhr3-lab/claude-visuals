@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>マンハッタン距離：碁盤の目で測る</title>
+<style>
+  :root{
+    --surface-0:#f5f4ee; --surface-1:#ecebe3; --surface-2:#ffffff;
+    --text-primary:#1f1e1b; --text-secondary:#5f5e5a; --text-muted:#8a8981;
+    --border:rgba(0,0,0,.10); --border-strong:rgba(0,0,0,.20);
+    --bg-accent:#e6f1fb; --text-accent:#185fa5; --border-accent:#378add;
+    --text-success:#3b6d11;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,"Roboto Mono",monospace;
+    --radius:8px;
+    --viz-route:#c79104; --viz-line:#c65133;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-0:#262624; --surface-1:#302f2d; --surface-2:#3a3a37;
+      --text-primary:#e9e7de; --text-secondary:#b1afa5; --text-muted:#85847c;
+      --border:rgba(255,255,255,.14); --border-strong:rgba(255,255,255,.26);
+      --bg-accent:#0c447c; --text-accent:#b5d4f4; --border-accent:#378add;
+      --text-success:#97c459;
+      --viz-route:#e0b23f; --viz-line:#ef8261;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font-family:var(--font-sans);line-height:1.7;
+    -webkit-font-smoothing:antialiased;padding:32px 16px}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:22px;font-weight:500;margin:0 0 4px}
+  .lede{font-size:14px;color:var(--text-secondary);margin:0 0 24px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  .btns{display:flex;gap:10px;margin:16px 0 0;align-items:center;flex-wrap:wrap}
+  button{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:14px;padding:8px 14px;border-radius:var(--radius);background:transparent;color:var(--text-primary);border:.5px solid var(--border-strong);cursor:pointer;transition:background .15s,transform .05s}
+  button:hover{background:var(--surface-1)}
+  button:active{transform:scale(.98)}
+  .status{font-size:13px;color:var(--text-muted);margin-left:auto}
+  footer{margin-top:28px;font-size:12px;color:var(--text-muted);border-top:.5px solid var(--border);padding-top:12px}
+
+  canvas{display:block;width:100%;background:var(--surface-2);border:.5px solid var(--border);border-radius:12px;touch-action:none;cursor:grab}
+  .formula{margin:16px 0 0;background:var(--bg-accent);color:var(--text-accent);border-radius:var(--radius);padding:10px 16px;font-size:15px;line-height:2;text-align:center}
+  .formula b{font-size:20px}
+  .note{font-size:13px;color:var(--text-secondary);margin:14px 0 0;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>マンハッタン距離：碁盤の目で測る</h1>
+  <p class="lede">縦と横にしか進めないタクシーの道のり。｜横の差｜＋｜縦の差｜で決まり、どのルートを通っても長さは同じ。AとBをドラッグできる（交差点にスナップ）。</p>
+
+  <h2 class="sr-only">碁盤の目をタクシーが走るアニメーションでマンハッタン距離を体験し、ルートを変えても道のりが変わらないことを確認できるインタラクティブ図</h2>
+
+  <main id="widget">
+    <canvas id="cv" width="680" height="440" aria-label="碁盤の目上の2点間のマンハッタン距離を示すキャンバス"></canvas>
+    <div class="formula" id="formula" aria-live="polite"></div>
+    <div class="btns">
+      <button id="btnRoute">🚕 ルートを変える</button>
+      <button id="btnDiamond">◇ Aから同じ距離の点は？</button>
+      <span class="status" id="routeName"></span>
+    </div>
+    <p class="note">
+      横→縦・縦→横・階段、どのルートでも道のりは同じ。同じマンハッタン距離の点を集めると<b>◇（ひし形）</b>になる（ユークリッドの円に対応）。
+      各次元の差を2乗せずそのまま足すので、外れ値・大きなズレの影響がユークリッドよりマイルド。k-means で使う場合、中心の最適解は平均でなく<b>中央値</b>になる（K-Medians）。
+    </p>
+  </main>
+
+  <footer>1ブロック = 1。薄い直線はユークリッド距離（比較用、常にマンハッタン以下）。</footer>
+</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height, G=40;
+let A={x:3*G,y:9*G}, B={x:13*G,y:3*G};
+let drag=null, routeMode=0, taxiT=0, diamondAnim=-1;
+const ROUTE_NAMES=['ルート：横→縦','ルート：縦→横','ルート：階段'];
+
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let C={};
+function palette(){ C={grid:css('--border'), ink:css('--text-primary'), route:css('--viz-route'), line:css('--viz-line'), surface:css('--surface-2')}; }
+palette();
+if(window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change',palette);
+
+const snap=v=>Math.round(v/G)*G;
+const unit=px=>Math.round(Math.abs(px)/G);
+
+function buildPath(){
+  const pts=[{x:A.x,y:A.y}];
+  const sx=Math.sign(B.x-A.x)*G, sy=Math.sign(B.y-A.y)*G;
+  let x=A.x, y=A.y;
+  if(routeMode===0){ while(x!==B.x){x+=sx;pts.push({x,y});} while(y!==B.y){y+=sy;pts.push({x,y});} }
+  else if(routeMode===1){ while(y!==B.y){y+=sy;pts.push({x,y});} while(x!==B.x){x+=sx;pts.push({x,y});} }
+  else { while(x!==B.x||y!==B.y){ if(x!==B.x){x+=sx;pts.push({x,y});} if(y!==B.y){y+=sy;pts.push({x,y});} } }
+  return pts;
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle=C.grid; ctx.lineWidth=5;
+  for(let x=0;x<=W;x+=G){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke(); }
+  for(let y=0;y<=H;y+=G){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
+
+  const dxu=unit(B.x-A.x), dyu=unit(B.y-A.y), dm=dxu+dyu;
+  const de=Math.hypot(B.x-A.x,B.y-A.y)/G;
+
+  if(diamondAnim>=0){
+    diamondAnim=Math.min(1,diamondAnim+0.02);
+    const r=dm*G*diamondAnim;
+    ctx.save(); ctx.globalAlpha=.6;
+    ctx.strokeStyle=C.route; ctx.lineWidth=2.5; ctx.setLineDash([6,6]);
+    ctx.beginPath();
+    ctx.moveTo(A.x+r,A.y); ctx.lineTo(A.x,A.y+r); ctx.lineTo(A.x-r,A.y); ctx.lineTo(A.x,A.y-r);
+    ctx.closePath(); ctx.stroke(); ctx.restore(); ctx.setLineDash([]);
+    if(diamondAnim>=1){
+      ctx.fillStyle=C.route; ctx.font='bold 13px sans-serif';
+      ctx.fillText('この◇の上はぜんぶAから同じマンハッタン距離', Math.max(8,A.x-150), Math.max(16,A.y-r-10));
+    }
+  }
+
+  ctx.save(); ctx.globalAlpha=.45;
+  ctx.strokeStyle=C.line; ctx.lineWidth=2; ctx.setLineDash([4,6]);
+  ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+  ctx.restore(); ctx.setLineDash([]);
+
+  const path=buildPath();
+  ctx.strokeStyle=C.route; ctx.lineWidth=5; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath(); path.forEach((p,i)=> i? ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+
+  if(path.length>1){
+    taxiT += 0.9/(path.length-1)/60*8;
+    if(taxiT>1.15) taxiT=0;
+    const tt=Math.min(1,taxiT);
+    const seg=Math.min(path.length-2, Math.floor(tt*(path.length-1)));
+    const f=tt*(path.length-1)-seg;
+    const tx=path[seg].x+(path[seg+1].x-path[seg].x)*f;
+    const ty=path[seg].y+(path[seg+1].y-path[seg].y)*f;
+    ctx.font='22px sans-serif'; ctx.fillText('🚕', tx-13, ty+8);
+  }
+
+  point(A,'A'); point(B,'B');
+
+  document.getElementById('formula').innerHTML =
+    'd = ｜横の差｜＋｜縦の差｜ = '+dxu+' ＋ '+dyu+' = <b>'+dm+'</b> ブロック'+
+    '<br><span style="font-size:12px">マンハッタン '+dm+' ≧ ユークリッド '+de.toFixed(2)+'（遠回りの分だけ長い）</span>';
+  document.getElementById('routeName').textContent=ROUTE_NAMES[routeMode];
+
+  requestAnimationFrame(draw);
+}
+function point(p,label){
+  ctx.beginPath(); ctx.arc(p.x,p.y,9,0,7);
+  ctx.fillStyle=C.ink; ctx.fill();
+  ctx.lineWidth=3; ctx.strokeStyle=C.surface; ctx.stroke();
+  ctx.fillStyle=C.ink; ctx.font='bold 15px sans-serif';
+  ctx.fillText(label,p.x-5,p.y-15);
+}
+requestAnimationFrame(draw);
+
+function pos(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)}; }
+cv.addEventListener('pointerdown',e=>{
+  const p=pos(e);
+  drag = Math.hypot(p.x-A.x,p.y-A.y)<28 ? A : Math.hypot(p.x-B.x,p.y-B.y)<28 ? B : null;
+  if(drag) cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove',e=>{
+  if(!drag) return;
+  const p=pos(e);
+  drag.x=Math.min(W-G,Math.max(G,snap(p.x)));
+  drag.y=Math.min(H-G,Math.max(G,snap(p.y)));
+  taxiT=0; diamondAnim = diamondAnim>=0 ? 0 : -1;
+});
+cv.addEventListener('pointerup',()=>drag=null);
+document.getElementById('btnRoute').onclick=()=>{ routeMode=(routeMode+1)%3; taxiT=0; };
+document.getElementById('btnDiamond').onclick=()=>{ diamondAnim = diamondAnim>=0 ? -1 : 0; };
+})();
+</script>
+</body>
+</html>

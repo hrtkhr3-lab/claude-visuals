@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>コサイン類似度：角度で比べる</title>
+<style>
+  :root{
+    --surface-0:#f5f4ee; --surface-1:#ecebe3; --surface-2:#ffffff;
+    --text-primary:#1f1e1b; --text-secondary:#5f5e5a; --text-muted:#8a8981;
+    --border:rgba(0,0,0,.10); --border-strong:rgba(0,0,0,.20);
+    --bg-accent:#e6f1fb; --text-accent:#185fa5; --border-accent:#378add;
+    --text-success:#3b6d11;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,"Roboto Mono",monospace;
+    --radius:8px;
+    --viz-a:#1a9e9a; --viz-b:#8b5cd6; --viz-arc:#c79104; --viz-warn:#c65133;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-0:#262624; --surface-1:#302f2d; --surface-2:#3a3a37;
+      --text-primary:#e9e7de; --text-secondary:#b1afa5; --text-muted:#85847c;
+      --border:rgba(255,255,255,.14); --border-strong:rgba(255,255,255,.26);
+      --bg-accent:#0c447c; --text-accent:#b5d4f4; --border-accent:#378add;
+      --text-success:#97c459;
+      --viz-a:#3fc4bf; --viz-b:#af8ae8; --viz-arc:#e0b23f; --viz-warn:#ef8261;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font-family:var(--font-sans);line-height:1.7;
+    -webkit-font-smoothing:antialiased;padding:32px 16px}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:22px;font-weight:500;margin:0 0 4px}
+  .lede{font-size:14px;color:var(--text-secondary);margin:0 0 24px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  .btns{display:flex;gap:10px;margin:16px 0 0;align-items:center;flex-wrap:wrap}
+  button{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:14px;padding:8px 14px;border-radius:var(--radius);background:transparent;color:var(--text-primary);border:.5px solid var(--border-strong);cursor:pointer;transition:background .15s,transform .05s}
+  button:hover{background:var(--surface-1)}
+  button:active{transform:scale(.98)}
+  .status{font-size:13px;color:var(--text-muted);margin-left:auto}
+  footer{margin-top:28px;font-size:12px;color:var(--text-muted);border-top:.5px solid var(--border);padding-top:12px}
+
+  canvas{display:block;width:100%;background:var(--surface-2);border:.5px solid var(--border);border-radius:12px;touch-action:none;cursor:grab}
+  .formula{margin:16px 0 0;background:var(--bg-accent);color:var(--text-accent);border-radius:var(--radius);padding:10px 16px;font-size:15px;line-height:2;text-align:center}
+  .formula b{font-size:20px}
+  .bar{height:14px;background:linear-gradient(90deg,var(--viz-warn),var(--viz-arc) 50%,var(--viz-a));border-radius:7px;position:relative;margin:14px 0 2px}
+  .bar .needle{position:absolute;top:-5px;width:4px;height:24px;background:var(--text-primary);border-radius:2px}
+  .barlab{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted)}
+  .note{font-size:13px;color:var(--text-secondary);margin:14px 0 0;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>コサイン類似度：角度で比べる</h1>
+  <p class="lede">2つのベクトルのなす角度で「似ている度合い」を測る。同じ向きで +1、直角で 0、逆向きで −1。矢印の先端をドラッグできる。</p>
+
+  <h2 class="sr-only">2本のベクトルをドラッグして角度とコサイン類似度の関係を体験し、長さを変えても類似度が変わらないことを確認できるインタラクティブ図</h2>
+
+  <main id="widget">
+    <canvas id="cv" width="680" height="440" aria-label="2つのベクトルのなす角度とコサイン類似度を示すキャンバス"></canvas>
+    <div class="formula" id="formula" aria-live="polite"></div>
+    <div class="bar"><div class="needle" id="needle"></div></div>
+    <div class="barlab"><span>−1 逆向き</span><span>0 直角</span><span>+1 同じ向き</span></div>
+    <div class="btns">
+      <button id="btnScale">📏 aの長さだけ変えてみる</button>
+      <span class="status" id="cmp"></span>
+    </div>
+    <p class="note">
+      いちばん大事な性質：長さ（＝量の大小）を変えても<b>コサイン類似度は変わらない</b>が、ユークリッド距離は変わる。
+      「量の大小」を無視して「<b>形・パターン</b>」だけで比べたいときに使う。
+      電力データなら、大家族と一人暮らしでも季節パターンの形が同じなら同じ仲間にできる。
+      k-means では 1 − cosθ を距離として使う。
+    </p>
+  </main>
+
+  <footer>cosθ = (a・b)／(|a||b|)。内積を両ベクトルの長さで割ったもの。</footer>
+</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+const O={x:120, y:H-80};
+let a={x:O.x+400, y:O.y-140}, b={x:O.x+210, y:O.y-290};
+let drag=null, scaleDemo=false, demoT=0, aBase=null;
+
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let C={};
+function palette(){ C={grid:css('--border'), ink:css('--text-primary'), a:css('--viz-a'), b:css('--viz-b'), arc:css('--viz-arc'), muted:css('--text-muted')}; }
+palette();
+if(window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change',palette);
+
+function vec(p){ return {x:p.x-O.x, y:p.y-O.y}; }
+function cosSim(){
+  const va=vec(a), vb=vec(b);
+  const na=Math.hypot(va.x,va.y), nb=Math.hypot(vb.x,vb.y);
+  if(na<1e-9||nb<1e-9) return 0;
+  return (va.x*vb.x+va.y*vb.y)/(na*nb);
+}
+function arrow(p,color,label){
+  const v=vec(p), n=Math.hypot(v.x,v.y);
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=4; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(O.x,O.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+  const ang=Math.atan2(v.y,v.x);
+  ctx.beginPath();
+  ctx.moveTo(p.x,p.y);
+  ctx.lineTo(p.x-16*Math.cos(ang-0.4), p.y-16*Math.sin(ang-0.4));
+  ctx.lineTo(p.x-16*Math.cos(ang+0.4), p.y-16*Math.sin(ang+0.4));
+  ctx.closePath(); ctx.fill();
+  ctx.save(); ctx.globalAlpha=.4;
+  ctx.beginPath(); ctx.arc(p.x,p.y,11,0,7); ctx.lineWidth=2; ctx.stroke(); ctx.restore();
+  ctx.font='bold 15px sans-serif';
+  ctx.fillText(label+'（長さ '+(n/60).toFixed(2)+'）', Math.min(W-140,p.x+14), Math.max(16,p.y-6));
+}
+
+function draw(t){
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle=C.grid; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(15,O.y); ctx.lineTo(W-15,O.y); ctx.moveTo(O.x,15); ctx.lineTo(O.x,H-15); ctx.stroke();
+  ctx.fillStyle=C.muted; ctx.font='12px sans-serif'; ctx.fillText('原点', O.x-32, O.y+16);
+
+  if(scaleDemo){
+    demoT+=0.02;
+    const s=1.25+0.75*Math.sin(demoT*2);
+    a.x=O.x+aBase.x*s; a.y=O.y+aBase.y*s;
+  }
+
+  const va=vec(a), vb=vec(b);
+  const angA=Math.atan2(va.y,va.x), angB=Math.atan2(vb.y,vb.x);
+  const cs=cosSim();
+  const theta=Math.acos(Math.max(-1,Math.min(1,cs)));
+
+  const r=64+4*Math.sin(t/300);
+  let d=angB-angA; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
+  ctx.save(); ctx.globalAlpha=.25;
+  ctx.beginPath(); ctx.moveTo(O.x,O.y);
+  ctx.arc(O.x,O.y,r,angA,angA+d,d<0);
+  ctx.closePath(); ctx.fillStyle=C.arc; ctx.fill(); ctx.restore();
+  ctx.strokeStyle=C.arc; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(O.x,O.y,r,angA,angA+d,d<0); ctx.stroke();
+  const mid=angA+d/2;
+  ctx.fillStyle=C.arc; ctx.font='bold 14px sans-serif';
+  ctx.fillText('θ = '+(theta*180/Math.PI).toFixed(1)+'°', O.x+(r+16)*Math.cos(mid)-16, O.y+(r+16)*Math.sin(mid)+5);
+
+  arrow(a,C.a,'a'); arrow(b,C.b,'b');
+
+  document.getElementById('formula').innerHTML =
+    'cosθ = <b>'+cs.toFixed(3)+'</b>　（コサイン距離 = 1 − cosθ = '+(1-cs).toFixed(3)+'）';
+  document.getElementById('needle').style.left='calc('+((cs+1)/2*100).toFixed(1)+'% - 2px)';
+
+  const eu=Math.hypot(a.x-b.x,a.y-b.y)/60;
+  document.getElementById('cmp').textContent =
+    scaleDemo ? 'コサイン '+cs.toFixed(3)+'（不変）／ ユークリッド '+eu.toFixed(2)+'（変わる！）'
+              : 'ユークリッド距離（比較用）: '+eu.toFixed(2);
+
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+function pos(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)}; }
+cv.addEventListener('pointerdown',e=>{
+  const p=pos(e);
+  drag = Math.hypot(p.x-a.x,p.y-a.y)<26 ? a : Math.hypot(p.x-b.x,p.y-b.y)<26 ? b : null;
+  if(drag){ cv.setPointerCapture(e.pointerId); if(drag===a && scaleDemo){ scaleDemo=false; updateBtn(); } }
+});
+cv.addEventListener('pointermove',e=>{
+  if(!drag) return;
+  const p=pos(e);
+  drag.x=Math.min(W-15,Math.max(15,p.x)); drag.y=Math.min(H-15,Math.max(15,p.y));
+});
+cv.addEventListener('pointerup',()=>drag=null);
+document.getElementById('btnScale').onclick=()=>{
+  scaleDemo=!scaleDemo;
+  if(scaleDemo){ aBase=vec(a); demoT=0; }
+  updateBtn();
+};
+function updateBtn(){ document.getElementById('btnScale').textContent = scaleDemo? '⏸ 伸縮を止める':'📏 aの長さだけ変えてみる'; }
+})();
+</script>
+</body>
+</html>
