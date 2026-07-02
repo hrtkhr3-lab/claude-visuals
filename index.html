@@ -34,6 +34,11 @@
   .lede{font-size:14px;color:var(--text-secondary);margin:0 0 4px}
   .count{font-size:12px;color:var(--text-muted);margin:0 0 28px}
 
+  .unit{margin:0 0 34px}
+  .unit-title{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;
+    color:var(--text-primary);margin:0 0 14px;padding-bottom:8px;border-bottom:.5px solid var(--border)}
+  .unit-count{font-size:11px;font-weight:500;color:var(--text-accent);background:var(--bg-accent);
+    border-radius:999px;padding:1px 9px;font-family:var(--font-mono)}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
   .card{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;
     background:var(--surface-2);border:.5px solid var(--border);border-radius:12px;
@@ -54,14 +59,22 @@
 <body>
 <div class="wrap">
   <h1>Claude Visuals</h1>
-  <p class="lede">チャットで生成した、単体で動くインタラクティブ可視化物のギャラリー。</p>
-  <p class="count">5 件</p>
+  <p class="lede">チャットで生成した、単体で動くインタラクティブ可視化物のギャラリー。単元ごとにまとめています。</p>
+  <p class="count">3 単元 ・ 6 件</p>
 
-  <main class="grid">
-      <a class="card" href="visuals/kmeans-clustering.html">
-        <h2 class="card-title">k-means クラスタリング：割り当てと更新の反復</h2>
-        <p class="card-lede">「①各点を最も近い中心に割り当てる → ②中心を自分の点たちの平均へ動かす」を繰り返すだけでグループが見つかる。距離のはかり方も切り替えられる。キャンバスをクリックすると点を追加。</p>
-        <span class="card-meta">kmeans-clustering.html · 2026-07-02</span>
+  <main>
+      <section class="unit">
+        <h2 class="unit-title">距離・類似度の可視化<span class="unit-count">4</span></h2>
+        <div class="grid">
+      <a class="card" href="visuals/dtw-vs-euclidean.html">
+        <h2 class="card-title">DTW vs ユークリッド距離 ― 音声波形マッチング</h2>
+        <p class="card-lede">同じ言葉を速さを変えて話した2つの波形を、点を順番通り比べる「ユークリッド距離」と時間軸を伸縮して合わせる「DTW」で対応づけ、時間ズレへの強さの違いを可視化する。</p>
+        <span class="card-meta">dtw-vs-euclidean.html · 2026-07-02</span>
+      </a>
+      <a class="card" href="visuals/euclidean-distance.html">
+        <h2 class="card-title">ユークリッド距離：まっすぐ測る</h2>
+        <p class="card-lede">2点を直線で結んだ長さ。ピタゴラスの定理 √(横²＋縦²) で決まる、いちばん基本の距離。点AとBをドラッグして動かせる。</p>
+        <span class="card-meta">euclidean-distance.html · 2026-07-02</span>
       </a>
       <a class="card" href="visuals/cosine-similarity.html">
         <h2 class="card-title">コサイン類似度：角度で比べる</h2>
@@ -73,16 +86,28 @@
         <p class="card-lede">縦と横にしか進めないタクシーの道のり。｜横の差｜＋｜縦の差｜で決まり、どのルートを通っても長さは同じ。AとBをドラッグできる（交差点にスナップ）。</p>
         <span class="card-meta">manhattan-distance.html · 2026-07-02</span>
       </a>
-      <a class="card" href="visuals/euclidean-distance.html">
-        <h2 class="card-title">ユークリッド距離：まっすぐ測る</h2>
-        <p class="card-lede">2点を直線で結んだ長さ。ピタゴラスの定理 √(横²＋縦²) で決まる、いちばん基本の距離。点AとBをドラッグして動かせる。</p>
-        <span class="card-meta">euclidean-distance.html · 2026-07-02</span>
+        </div>
+      </section>
+      <section class="unit">
+        <h2 class="unit-title">クラスタリング<span class="unit-count">1</span></h2>
+        <div class="grid">
+      <a class="card" href="visuals/kmeans-clustering.html">
+        <h2 class="card-title">k-means クラスタリング：割り当てと更新の反復</h2>
+        <p class="card-lede">「①各点を最も近い中心に割り当てる → ②中心を自分の点たちの平均へ動かす」を繰り返すだけでグループが見つかる。距離のはかり方も切り替えられる。キャンバスをクリックすると点を追加。</p>
+        <span class="card-meta">kmeans-clustering.html · 2026-07-02</span>
       </a>
+        </div>
+      </section>
+      <section class="unit">
+        <h2 class="unit-title">大規模言語モデル（LLM）<span class="unit-count">1</span></h2>
+        <div class="grid">
       <a class="card" href="visuals/llm-generation-loop.html">
         <h2 class="card-title">LLMの自己回帰的生成ループ</h2>
         <p class="card-lede">文脈 → 順伝播 → ロジット → softmax・温度 → top-p → サンプリング → 追加、を1トークンずつ実行する。温度とtop-pで分布の形と裾の打ち切りが変わる。</p>
         <span class="card-meta">llm-generation-loop.html · 2026-07-02</span>
       </a>
+        </div>
+      </section>
   </main>
 
   <footer>自動生成: <code>scripts/build-index.mjs</code> ／ 追加は <code>visuals/&lt;name&gt;.html</code> → <code>npm run build</code>。</footer>

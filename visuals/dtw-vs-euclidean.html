@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="unit" content="距離・類似度の可視化">
+<title>DTW vs ユークリッド距離 ― 音声波形マッチング</title>
+<style>
+  :root{
+    --surface-0:#f5f4ee; --surface-1:#ecebe3; --surface-2:#ffffff;
+    --text-primary:#1f1e1b; --text-secondary:#5f5e5a; --text-muted:#8a8981;
+    --border:rgba(0,0,0,.10); --border-strong:rgba(0,0,0,.20);
+    --bg-accent:#e6f1fb; --text-accent:#185fa5; --border-accent:#378add;
+    --text-success:#3b6d11;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,"Roboto Mono",monospace;
+    --radius:8px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-0:#262624; --surface-1:#302f2d; --surface-2:#3a3a37;
+      --text-primary:#e9e7de; --text-secondary:#b1afa5; --text-muted:#85847c;
+      --border:rgba(255,255,255,.14); --border-strong:rgba(255,255,255,.26);
+      --bg-accent:#0c447c; --text-accent:#b5d4f4; --border-accent:#378add;
+      --text-success:#97c459;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font-family:var(--font-sans);line-height:1.7;
+    -webkit-font-smoothing:antialiased;padding:24px 16px}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:22px;font-weight:500;margin:0 0 4px}
+  .lede{font-size:14px;color:var(--text-secondary);margin:0 0 18px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+  /* ── DTW 可視化物 固有のスタイル ───────────────── */
+  #widget{
+    /* dataviz 検証済みパレット（widget 内スコープ） */
+    --series-a:#2a78d6; --series-b:#eb6834; --path:#e34948;
+    --seq-lo:#cde2fb; --seq-hi:#0d366b;
+  }
+  @media (prefers-color-scheme: dark){
+    #widget{ --series-a:#3987e5; --series-b:#d95926; --path:#e66767; --seq-lo:#0d2038; --seq-hi:#cde2fb; }
+  }
+
+  /* 操作パネルと可視化を左右2ペインで同一ビュー内に置く */
+  .stage{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr);gap:18px;align-items:start}
+  @media (max-width:900px){ .stage{grid-template-columns:1fr} }
+
+  .panel-card{background:var(--surface-2);border:.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+  .panel-card h2{font-size:13px;font-weight:600;margin:0 0 2px;letter-spacing:.02em}
+  .panel-card .cap{font-size:12px;color:var(--text-muted);margin:0 0 10px}
+  canvas{display:block;width:100%;height:auto;touch-action:none}
+
+  .side{position:sticky;top:16px}
+
+  /* スコア */
+  .score{border:.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+  .score .k{font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:7px}
+  .score .v{font-size:26px;font-weight:700;margin-top:1px;font-variant-numeric:tabular-nums}
+  .score .d{font-size:11.5px;color:var(--text-secondary);margin-top:1px;line-height:1.45}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+  /* コントロール */
+  .ctrl{margin:9px 0}
+  .ctrl label{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary);margin-bottom:3px}
+  .ctrl label b{color:var(--text-primary);font-variant-numeric:tabular-nums;font-weight:600}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:2px;background:var(--border-strong);outline:none;margin:0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px var(--bg-accent)}
+
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+  select{border:.5px solid var(--border-strong);background:var(--surface-2);color:var(--text-primary);border-radius:var(--radius);padding:6px 8px;font:inherit;font-size:12.5px}
+  .seg{display:inline-flex;border:.5px solid var(--border-strong);border-radius:8px;overflow:hidden}
+  .seg button{border:0;border-radius:0;background:transparent;color:var(--text-secondary);padding:6px 11px;font-size:12.5px;cursor:pointer}
+  .seg button.on{background:var(--series-a);color:#fff}
+  button.btn{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:12.5px;padding:6px 11px;border-radius:var(--radius);background:transparent;color:var(--text-primary);border:.5px solid var(--border-strong);cursor:pointer}
+  button.btn:hover{background:var(--surface-1)}
+  button.btn:active{transform:scale(.98)}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-top:8px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .swatch{width:20px;height:3px;border-radius:2px;display:inline-block}
+  .dash{width:20px;height:0;border-top:2px dashed var(--text-muted);display:inline-block}
+  .story{font-size:12.5px;color:var(--text-secondary);background:var(--bg-accent);border-radius:8px;padding:9px 11px;margin-top:12px;line-height:1.55}
+
+  footer{margin-top:22px;font-size:12px;color:var(--text-muted);border-top:.5px solid var(--border);padding-top:12px}
+  footer code{font-family:var(--font-mono);background:var(--surface-1);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DTW vs ユークリッド距離 ― 音声波形マッチング</h1>
+  <p class="lede">同じ言葉を速さを変えて話した2つの波形を、点を順番通り比べる「ユークリッド距離」と時間軸を伸縮して合わせる「DTW」で対応づけ、時間ズレへの強さの違いを可視化する。</p>
+
+  <h2 class="sr-only">2つの音声波形の対応づけを、ユークリッド距離とDTWで比較するインタラクティブ図。左に波形の対応線とコスト行列、右に操作パネルと距離スコアを表示。</h2>
+
+  <main id="widget">
+    <div class="stage">
+      <!-- 左：動く画面 -->
+      <div class="viz">
+        <div class="panel-card">
+          <h2>① 波形どうしの対応</h2>
+          <p class="cap">上=音声A（基準）／下=音声B（速さ違い）。細い線が「どの点とどの点を対応させているか」。</p>
+          <canvas id="wave" width="1160" height="440"></canvas>
+          <div class="legend">
+            <span><i class="swatch" style="background:var(--series-a)"></i>音声A</span>
+            <span><i class="swatch" style="background:var(--series-b)"></i>音声B</span>
+            <span><i class="swatch" style="background:var(--text-muted)"></i>対応線</span>
+          </div>
+        </div>
+        <div class="panel-card">
+          <h2>② コスト行列とパス</h2>
+          <p class="cap">各マス＝A[i]とB[j]の差（明=近い／暗=遠い）。線が対応の軌跡。</p>
+          <canvas id="matrix" width="640" height="640" style="max-width:440px;margin:0 auto"></canvas>
+          <div class="legend">
+            <span><i class="swatch" style="background:var(--path);height:4px"></i>DTWパス（曲がれる）</span>
+            <span><i class="dash"></i>ユークリッド（対角固定）</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右：操作パネル＋スコア（sticky で常に画面内） -->
+      <div class="panel">
+        <div class="side">
+          <div class="panel-card">
+            <h2>距離スコア（小さいほど似ている）</h2>
+            <p class="cap">同じ2波形でも、ものさし次第で判定が変わる。</p>
+            <div class="score">
+              <div class="k"><span class="dot" style="background:var(--text-muted)"></span>ユークリッド距離</div>
+              <div class="v" id="euclidVal">–</div>
+              <div class="d">i番目とi番目を機械的に比較。時間がズレると誤差が爆発。</div>
+            </div>
+            <div class="score">
+              <div class="k"><span class="dot" style="background:var(--path)"></span>DTW距離</div>
+              <div class="v" id="dtwVal">–</div>
+              <div class="d" id="dtwGain">–</div>
+            </div>
+          </div>
+
+          <div class="panel-card">
+            <h2>操作パネル</h2>
+            <p class="cap">音声Bの話し方を変えると、左の図が即座に動く。</p>
+            <div class="ctrl">
+              <label>時間シフト（開始ズレ）<b id="shiftLab">0</b></label>
+              <input type="range" id="shift" min="-25" max="25" value="8" step="1">
+            </div>
+            <div class="ctrl">
+              <label>話速（全体の伸び縮み）<b id="speedLab">1.00×</b></label>
+              <input type="range" id="speed" min="60" max="150" value="115" step="1">
+            </div>
+            <div class="ctrl">
+              <label>非線形ゆらぎ（部分的に速い/遅い）<b id="bendLab">0.30</b></label>
+              <input type="range" id="bend" min="-60" max="60" value="30" step="1">
+            </div>
+            <div class="ctrl">
+              <label>ノイズ<b id="noiseLab">0.04</b></label>
+              <input type="range" id="noise" min="0" max="30" value="4" step="1">
+            </div>
+            <div class="row">
+              <select id="preset">
+                <option value="vowel">母音「あー」風</option>
+                <option value="word" selected>「こんにちは」風</option>
+                <option value="sine">正弦波</option>
+              </select>
+              <div class="seg" id="modeSeg">
+                <button data-mode="dtw" class="on">DTW</button>
+                <button data-mode="euclid">ユークリッド</button>
+                <button data-mode="both">両方</button>
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn" id="playA">▶ A を聴く</button>
+              <button class="btn" id="playB">▶ B を聴く</button>
+              <button class="btn" id="reset">リセット</button>
+            </div>
+            <div class="story" id="story">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    DTW（Dynamic Time Warping／動的時間伸縮法）は時間軸を局所的に伸縮させて2つの時系列を最もよく重ねる対応を動的計画法で求める手法。音声認識・ジェスチャ認識・心拍波形照合など「速さのばらつき」がある信号の比較に使う。波形は説明用の合成信号（実録音ではない）。関連: <code>euclidean-distance</code> / <code>manhattan-distance</code> / <code>cosine-similarity</code>。
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+const N = 64;
+const widget = document.getElementById('widget');
+const css = k => getComputedStyle(widget).getPropertyValue(k).trim();
+const el = id => document.getElementById(id);
+
+/* ---------- 波形テンプレート ---------- */
+function bell(p,c,w){const z=(p-c)/w;return Math.exp(-0.5*z*z);}
+function template(p,kind){
+  if(p<0||p>1)return 0;
+  if(kind==='sine') return Math.sin(2*Math.PI*2.5*p)*bell(p,0.5,0.42);
+  if(kind==='vowel'){ const env=bell(p,0.5,0.20); return env*(0.85+0.15*Math.sin(2*Math.PI*6*p)); }
+  const syl=[[0.10,0.9,0.045],[0.28,0.7,0.040],[0.45,1.0,0.050],[0.63,0.65,0.038],[0.82,0.85,0.055]];
+  let v=0; for(const[c,h,w]of syl) v+=h*bell(p,c,w); return v;
+}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+function rng(i){const x=Math.sin(i*12.9898+78.233)*43758.5453;return x-Math.floor(x);}
+
+function makeSignals(p){
+  const A=new Array(N),B=new Array(N);
+  for(let i=0;i<N;i++){
+    const u=i/(N-1);
+    A[i]=template(u,p.kind);
+    let ph=p.shift+u*p.speed+p.bend*(u*u-u);
+    B[i]=template(clamp(ph,0,1),p.kind)+(p.noise?(rng(i)-0.5)*2*p.noise:0);
+  }
+  return {A,B};
+}
+
+/* ---------- 距離 ---------- */
+function dtw(A,B){
+  const n=A.length,m=B.length;
+  const D=Array.from({length:n+1},()=>new Array(m+1).fill(Infinity)); D[0][0]=0;
+  for(let i=1;i<=n;i++)for(let j=1;j<=m;j++){
+    const c=Math.abs(A[i-1]-B[j-1]);
+    D[i][j]=c+Math.min(D[i-1][j],D[i][j-1],D[i-1][j-1]);
+  }
+  const path=[]; let i=n,j=m;
+  while(i>0&&j>0){ path.push([i-1,j-1]);
+    const a=D[i-1][j],b=D[i][j-1],c=D[i-1][j-1];
+    if(c<=a&&c<=b){i--;j--;} else if(a<=b){i--;} else {j--;}
+  }
+  path.reverse(); return {dist:D[n][m],path};
+}
+function euclid(A,B){ let s=0; for(let i=0;i<A.length;i++) s+=Math.abs(A[i]-B[i]); return {dist:s,path:A.map((_,i)=>[i,i])}; }
+
+/* ---------- 描画：波形 ---------- */
+const waveCv=el('wave'), wctx=waveCv.getContext('2d');
+const matCv=el('matrix'), mctx=matCv.getContext('2d');
+
+function drawCurve(ctx,S,xOf,yOf,color){
+  ctx.strokeStyle=color; ctx.lineWidth=3.2; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath();
+  for(let i=0;i<S.length;i++){const x=xOf(i),y=yOf(i); i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+  ctx.stroke();
+}
+function drawWaves(A,B,pairs){
+  const W=waveCv.width,H=waveCv.height,ctx=wctx; ctx.clearRect(0,0,W,H);
+  const padX=44,padTop=26,padBot=26;
+  const laneH=(H-padTop-padBot)/2;
+  const topMid=padTop+laneH*0.5, botMid=padTop+laneH+laneH*0.5, amp=laneH*0.42;
+  const xOf=i=>padX+(W-2*padX)*(i/(N-1));
+  const yA=i=>topMid-A[i]*amp, yB=i=>botMid-B[i]*amp;
+  ctx.strokeStyle=css('--border-strong'); ctx.lineWidth=1;
+  [topMid,botMid].forEach(y=>{ctx.beginPath();ctx.moveTo(padX,y);ctx.lineTo(W-padX,y);ctx.stroke();});
+  ctx.strokeStyle=css('--text-muted'); ctx.globalAlpha=0.4; ctx.lineWidth=1.4;
+  for(const[i,j]of pairs){ctx.beginPath();ctx.moveTo(xOf(i),yA(i));ctx.lineTo(xOf(j),yB(j));ctx.stroke();}
+  ctx.globalAlpha=1;
+  drawCurve(ctx,A,xOf,yA,css('--series-a'));
+  drawCurve(ctx,B,xOf,yB,css('--series-b'));
+  ctx.fillStyle=css('--text-muted'); ctx.font='600 19px system-ui'; ctx.textBaseline='middle';
+  ctx.fillText('A',10,topMid); ctx.fillText('B',10,botMid);
+}
+
+/* ---------- 描画：コスト行列 ---------- */
+function toRGB(str){
+  str=str.trim();
+  if(str[0]==='#'){return [parseInt(str.slice(1,3),16),parseInt(str.slice(3,5),16),parseInt(str.slice(5,7),16)];}
+  const m=str.match(/(\d+\.?\d*)/g); return m?m.slice(0,3).map(Number):[0,0,0];
+}
+function lerpColor(c1,c2,t){const a=toRGB(c1),b=toRGB(c2);return `rgb(${a.map((v,k)=>Math.round(v+(b[k]-v)*t)).join(',')})`;}
+function drawMatrix(A,B,dtwPath,mode){
+  const W=matCv.width,H=matCv.height,ctx=mctx; ctx.clearRect(0,0,W,H);
+  const pad=28, gw=W-2*pad, gh=H-2*pad, cw=gw/N, ch=gh/N;
+  let maxC=0; const C=[];
+  for(let i=0;i<N;i++){C[i]=[];for(let j=0;j<N;j++){const c=Math.abs(A[i]-B[j]);C[i][j]=c;if(c>maxC)maxC=c;}}
+  const lo=css('--seq-lo'),hi=css('--seq-hi');
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++){
+    const t=maxC?C[i][j]/maxC:0;
+    ctx.fillStyle=lerpColor(lo,hi,Math.pow(t,0.85));
+    ctx.fillRect(pad+i*cw,pad+j*ch,cw+0.5,ch+0.5);
+  }
+  const px=i=>pad+(i+0.5)*cw, py=j=>pad+(j+0.5)*ch;
+  if(mode==='euclid'||mode==='both'){
+    ctx.strokeStyle=css('--text-muted'); ctx.lineWidth=3; ctx.setLineDash([7,6]);
+    ctx.beginPath(); ctx.moveTo(px(0),py(0)); ctx.lineTo(px(N-1),py(N-1)); ctx.stroke(); ctx.setLineDash([]);
+  }
+  if(mode==='dtw'||mode==='both'){
+    ctx.strokeStyle=css('--path'); ctx.lineWidth=4; ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.beginPath(); dtwPath.forEach(([i,j],k)=>{const x=px(i),y=py(j);k?ctx.lineTo(x,y):ctx.moveTo(x,y);}); ctx.stroke();
+  }
+  ctx.strokeStyle=css('--border-strong'); ctx.lineWidth=1; ctx.strokeRect(pad,pad,gw,gh);
+  ctx.fillStyle=css('--text-muted'); ctx.font='12px system-ui'; ctx.textAlign='center';
+  ctx.fillText('音声A のインデックス i →',W/2,H-7);
+  ctx.save(); ctx.translate(13,H/2); ctx.rotate(-Math.PI/2); ctx.fillText('音声B のインデックス j →',0,0); ctx.restore();
+  ctx.textAlign='start';
+}
+
+/* ---------- 状態 ---------- */
+let mode='dtw', lastSignals=null;
+function readParams(){
+  return {
+    shift:+el('shift').value/100, speed:+el('speed').value/100,
+    bend:+el('bend').value/100, noise:+el('noise').value/100, kind:el('preset').value,
+  };
+}
+function update(){
+  const p=readParams();
+  el('shiftLab').textContent=(p.shift>=0?'+':'')+Math.round(p.shift*100);
+  el('speedLab').textContent=p.speed.toFixed(2)+'×';
+  el('bendLab').textContent=p.bend.toFixed(2);
+  el('noiseLab').textContent=p.noise.toFixed(2);
+  const {A,B}=makeSignals(p); lastSignals={A,B};
+  const e=euclid(A,B), d=dtw(A,B);
+  const pairs = mode==='euclid'?e.path:d.path;
+  drawWaves(A,B,pairs); drawMatrix(A,B,d.path,mode);
+  el('euclidVal').textContent=e.dist.toFixed(1);
+  el('dtwVal').textContent=d.dist.toFixed(1);
+  const ratio=d.dist>0?e.dist/d.dist:1;
+  el('dtwGain').textContent=`ユークリッドの約 ${ratio.toFixed(1)} 倍「近い」と判定（時間ズレを吸収）`;
+  let s;
+  if(ratio>=1.8) s=`音声Bが大きく時間的にズレている状態。DTWパスがコスト行列の暗い谷を避けて曲がり、対応線が山と山を結んでいる。ユークリッドは対角固定なのでズレた点どうしを比べ、距離が約${ratio.toFixed(1)}倍に膨らむ。`;
+  else if(ratio>=1.2) s=`軽い時間ズレ。DTWはわずかに曲がって山を合わせ、ユークリッドより正しく「似ている」と判定している。`;
+  else s=`2波形がほぼ揃った状態。このとき両者の差は小さい。スライダーでズレを加えると差が現れる。`;
+  el('story').textContent=s;
+}
+
+/* ---------- 音として聴く ---------- */
+let audioCtx=null;
+function playSignal(which){
+  if(!lastSignals)return;
+  const sig=which==='A'?lastSignals.A:lastSignals.B;
+  audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+  const sr=audioCtx.sampleRate,dur=0.9,len=Math.floor(sr*dur);
+  const buf=audioCtx.createBuffer(1,len,sr), ch=buf.getChannelData(0), carrier=200;
+  for(let n=0;n<len;n++){
+    const t=n/len, idx=t*(N-1), i0=Math.floor(idx), i1=Math.min(N-1,i0+1), f=idx-i0;
+    let env=sig[i0]*(1-f)+sig[i1]*f; env=Math.max(0,env);
+    const s=Math.sin(2*Math.PI*carrier*(n/sr));
+    const fade=Math.min(1,20*t,20*(1-t));
+    ch[n]=s*env*0.5*fade;
+  }
+  const src=audioCtx.createBufferSource(); src.buffer=buf; src.connect(audioCtx.destination); src.start();
+}
+
+/* ---------- イベント ---------- */
+['shift','speed','bend','noise'].forEach(id=>el(id).addEventListener('input',update));
+el('preset').addEventListener('change',update);
+document.querySelectorAll('#modeSeg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); mode=b.dataset.mode; update();
+}));
+el('playA').addEventListener('click',()=>playSignal('A'));
+el('playB').addEventListener('click',()=>playSignal('B'));
+el('reset').addEventListener('click',()=>{
+  el('shift').value=8; el('speed').value=115; el('bend').value=30; el('noise').value=4; el('preset').value='word';
+  document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('on',x.dataset.mode==='dtw'));
+  mode='dtw'; update();
+});
+window.addEventListener('resize',update);
+update();
+})();
+</script>
+</body>
+</html>

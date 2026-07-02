@@ -25,6 +25,8 @@ claude-visuals/
    - `@media (prefers-color-scheme: dark)` を消さない。
    - 外部フォント / CDN / 外部スクリプトに依存しない（**standalone** であること）。
    - `<title>` にタイトルを書く → ギャラリーのカード見出しになる。
+   - `<meta name="unit" content="…">` に**単元名**を書く → ギャラリーがこの単元ごとにカードをまとめる。
+     省略すると「その他」単元に入る。表示順は build-index.mjs の `UNIT_ORDER` で制御。
    - `<p class="lede">…</p>` に一文の説明を書く → カードの本文になる（任意だが推奨）。
    - widget 本体は `<main id="widget">…</main>` に入れる。固有の CSS/JS はその可視化物の中で完結させる。
 
@@ -34,9 +36,10 @@ claude-visuals/
 
 ## ギャラリーの仕組み（build-index.mjs）
 
-- `visuals/*.html` を読み、各ファイルから `<title>` と `<p class="lede">` を素朴な正規表現で抽出。
-- 見つからなければ title はファイル名で代替、lede は省略。
-- カードは**更新日時の新しい順**（同時刻はファイル名昇順）に並ぶ。
+- `visuals/*.html` を読み、各ファイルから `<title>` / `<meta name="unit">` / `<p class="lede">` を素朴な正規表現で抽出。
+- 見つからなければ title はファイル名で代替、unit は「その他」、lede は省略。
+- **単元（unit）ごとにセクション分け**して表示。単元の並びは `UNIT_ORDER`（先頭固定）→ 未登録は名前順 → 「その他」は最後。
+- 各単元内のカードは**更新日時の新しい順**（同時刻はファイル名昇順）に並ぶ。
 - Node 標準ライブラリのみ。**依存パッケージを足さない**（`npm install` 不要で動くのが売り）。
 
 ## 触ってよい / いけない

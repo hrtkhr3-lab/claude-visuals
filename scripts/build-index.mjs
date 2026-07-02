@@ -21,6 +21,11 @@ function extractLede(html) {
   const m = html.match(/<p[^>]*class=["'][^"']*\blede\b[^"']*["'][^>]*>([\s\S]*?)<\/p>/i);
   return m ? decodeEntities(stripTags(m[1]).replace(/\s+/g, ' ').trim()) : '';
 }
+function extractUnit(html) {
+  // <meta name="unit" content="…">（単元名。無ければ「その他」に分類）
+  const m = html.match(/<meta\s+name=["']unit["']\s+content=["']([^"']*)["'][^>]*>/i);
+  return m ? decodeEntities(m[1].trim()) : '';
+}
 function stripTags(s) { return s.replace(/<[^>]*>/g, ''); }
 function decodeEntities(s) {
   return s
@@ -58,12 +63,41 @@ async function collect() {
       href: `visuals/${file}`,
       title: extractTitle(html) || file.replace(/\.html$/i, ''),
       lede: extractLede(html),
+      unit: extractUnit(html) || 'その他',
       mtime: st.mtime,
     });
   }
   // 更新日時の新しい順（同時刻はファイル名昇順）
   items.sort((a, b) => (b.mtime - a.mtime) || a.file.localeCompare(b.file));
   return items;
+}
+
+// ── 単元（unit）ごとにグループ化 ──────────────────────
+// UNIT_ORDER に載る単元はこの順で先頭に、載らない単元は名前順で続き、
+// 「その他」は常に最後。単元内は collect() の並び（更新日時の新しい順）を保つ。
+const UNIT_ORDER = [
+  '距離・類似度の可視化',
+  'クラスタリング',
+  '大規模言語モデル（LLM）',
+];
+function groupByUnit(items) {
+  const byUnit = new Map();
+  for (const it of items) {
+    if (!byUnit.has(it.unit)) byUnit.set(it.unit, []);
+    byUnit.get(it.unit).push(it);
+  }
+  const rank = u => {
+    const i = UNIT_ORDER.indexOf(u);
+    if (i !== -1) return [0, i, ''];
+    if (u === 'その他') return [2, 0, ''];
+    return [1, 0, u];
+  };
+  return [...byUnit.entries()]
+    .map(([unit, list]) => ({ unit, list }))
+    .sort((a, b) => {
+      const ra = rank(a.unit), rb = rank(b.unit);
+      return ra[0] - rb[0] || ra[1] - rb[1] || ra[2].localeCompare(rb[2]);
+    });
 }
 
 function renderCard(it) {
@@ -75,11 +109,23 @@ function renderCard(it) {
       </a>`;
 }
 
+function renderSection({ unit, list }) {
+  const cards = list.map(renderCard).join('\n');
+  return `      <section class="unit">
+        <h2 class="unit-title">${esc(unit)}<span class="unit-count">${list.length}</span></h2>
+        <div class="grid">
+${cards}
+        </div>
+      </section>`;
+}
+
 function renderPage(items) {
-  const cards = items.length
-    ? items.map(renderCard).join('\n')
+  const groups = groupByUnit(items);
+  const sections = items.length
+    ? groups.map(renderSection).join('\n')
     : `      <p class="empty">まだ可視化物がありません。visuals/ に .html を追加して <code>npm run build</code>。</p>`;
   const count = items.length;
+  const unitCount = groups.length;
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -116,6 +162,11 @@ function renderPage(items) {
   .lede{font-size:14px;color:var(--text-secondary);margin:0 0 4px}
   .count{font-size:12px;color:var(--text-muted);margin:0 0 28px}
 
+  .unit{margin:0 0 34px}
+  .unit-title{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;
+    color:var(--text-primary);margin:0 0 14px;padding-bottom:8px;border-bottom:.5px solid var(--border)}
+  .unit-count{font-size:11px;font-weight:500;color:var(--text-accent);background:var(--bg-accent);
+    border-radius:999px;padding:1px 9px;font-family:var(--font-mono)}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
   .card{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;
     background:var(--surface-2);border:.5px solid var(--border);border-radius:12px;
@@ -136,11 +187,11 @@ function renderPage(items) {
 <body>
 <div class="wrap">
   <h1>Claude Visuals</h1>
-  <p class="lede">チャットで生成した、単体で動くインタラクティブ可視化物のギャラリー。</p>
-  <p class="count">${count} 件</p>
+  <p class="lede">チャットで生成した、単体で動くインタラクティブ可視化物のギャラリー。単元ごとにまとめています。</p>
+  <p class="count">${unitCount} 単元 ・ ${count} 件</p>
 
-  <main class="grid">
-${cards}
+  <main>
+${sections}
   </main>
 
   <footer>自動生成: <code>scripts/build-index.mjs</code> ／ 追加は <code>visuals/&lt;name&gt;.html</code> → <code>npm run build</code>。</footer>

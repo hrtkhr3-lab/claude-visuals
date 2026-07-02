@@ -31,6 +31,7 @@ claude-visuals/
    - `@media (prefers-color-scheme: dark)` を消さない。
    - 外部依存を持たせない（standalone であること）。
    - `<title>` にタイトル → ギャラリーのカード見出しになる。
+   - `<meta name="unit" content="…">` に単元名 → ギャラリーが単元ごとにまとめる（省略時は「その他」）。
    - `<p class="lede">…</p>` に一文の説明 → カード本文になる（任意だが推奨）。
    - widget 本体は `<main id="widget">…</main>` に入れ、固有の CSS/JS はその中で完結させる。
 2. ギャラリーを再生成する:
@@ -41,9 +42,10 @@ claude-visuals/
 
 ## ギャラリーの仕組み
 
-`scripts/build-index.mjs` が `visuals/*.html` を読み、各ファイルの `<title>` と
-`<p class="lede">` を抽出してカード型のリンク集 `index.html` を生成する。
-カードは更新日時の新しい順に並ぶ。title が無ければファイル名で代替、lede は省略可。
+`scripts/build-index.mjs` が `visuals/*.html` を読み、各ファイルの `<title>` /
+`<meta name="unit">` / `<p class="lede">` を抽出してカード型のリンク集 `index.html` を生成する。
+カードは **単元（unit）ごとにセクション分け**され、各単元内は更新日時の新しい順に並ぶ。
+title が無ければファイル名で代替、unit が無ければ「その他」、lede は省略可。
 
 ## ライセンス
 
