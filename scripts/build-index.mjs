@@ -79,6 +79,7 @@ const UNIT_ORDER = [
   '距離・類似度の可視化',
   'クラスタリング',
   '大規模言語モデル（LLM）',
+  'ニューラルネットワーク',
 ];
 function groupByUnit(items) {
   const byUnit = new Map();

@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="unit" content="ニューラルネットワーク">
+<title>ニューラルネットワークの中身をのぞく</title>
+<style>
+  :root{
+    --surface-0:#f5f4ee; --surface-1:#ecebe3; --surface-2:#ffffff;
+    --text-primary:#1f1e1b; --text-secondary:#5f5e5a; --text-muted:#8a8981;
+    --border:rgba(0,0,0,.10); --border-strong:rgba(0,0,0,.20);
+    --bg-accent:#e6f1fb; --text-accent:#185fa5; --border-accent:#378add;
+    --text-success:#3b6d11;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,"Roboto Mono",monospace;
+    --radius:8px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-0:#262624; --surface-1:#302f2d; --surface-2:#3a3a37;
+      --text-primary:#e9e7de; --text-secondary:#b1afa5; --text-muted:#85847c;
+      --border:rgba(255,255,255,.14); --border-strong:rgba(255,255,255,.26);
+      --bg-accent:#0c447c; --text-accent:#b5d4f4; --border-accent:#378add;
+      --text-success:#97c459;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font-family:var(--font-sans);line-height:1.7;
+    -webkit-font-smoothing:antialiased;padding:32px 16px}
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:22px;font-weight:500;margin:0 0 4px}
+  .lede{font-size:14px;color:var(--text-secondary);margin:0 0 24px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+  .pipe{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 20px}
+  .pill{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--surface-1);color:var(--text-secondary);white-space:nowrap;transition:background .2s,color .2s;cursor:pointer;border:none;font-family:inherit}
+  .pill.on{background:var(--bg-accent);color:var(--text-accent)}
+  .sep{color:var(--text-muted);font-size:12px}
+
+  .field-label{font-size:13px;color:var(--text-secondary);margin:0 0 6px}
+
+  .ctrl{display:flex;align-items:center;gap:12px;margin:10px 0;font-size:13px;color:var(--text-secondary)}
+  .ctrl>label{min-width:96px}
+  .ctrl .val{min-width:44px;text-align:right;font-weight:500;color:var(--text-primary)}
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:2px;background:var(--border-strong);outline:none;margin:0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px var(--bg-accent)}
+
+  .btns{display:flex;gap:10px;margin:22px 0 0;align-items:center;flex-wrap:wrap}
+  button{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:14px;padding:8px 14px;border-radius:var(--radius);background:transparent;color:var(--text-primary);border:.5px solid var(--border-strong);cursor:pointer;transition:background .15s,transform .05s}
+  button:hover{background:var(--surface-1)}
+  button:active{transform:scale(.98)}
+  button svg{width:16px;height:16px}
+  .status{font-size:13px;color:var(--text-muted);margin-left:auto;font-variant-numeric:tabular-nums}
+
+  footer{margin-top:28px;font-size:12px;color:var(--text-muted);border-top:.5px solid var(--border);padding-top:12px}
+
+  /* ── 固有スタイル ───────────────── */
+  .ctrl-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 28px;margin:0 0 8px}
+  @media (max-width:560px){.ctrl-grid{grid-template-columns:1fr}}
+  .panels{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:8px}
+  .net-panel{flex:1 1 360px;min-width:300px}
+  .data-panel{flex:0 0 280px;display:flex;flex-direction:column;gap:8px}
+  canvas{display:block;background:var(--surface-2);border:.5px solid var(--border);border-radius:var(--radius);touch-action:none}
+  #net{width:100%;height:340px;cursor:default}
+  #plane{width:280px;height:280px;cursor:crosshair}
+  #loss{width:280px;height:56px}
+  .cap{font-size:12px;color:var(--text-muted);margin:4px 2px 0}
+  .cap b{color:var(--text-secondary);font-weight:500}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin:6px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .sw{display:inline-block;width:14px;height:5px;border-radius:2px}
+  .sw.pos{background:#378add}.sw.neg{background:#d3543a}
+  .howto{font-size:13px;color:var(--text-secondary);background:var(--surface-1);border-radius:var(--radius);padding:12px 16px;margin-top:22px}
+  .howto ul{margin:6px 0 0;padding-left:20px}
+  .howto li{margin:3px 0}
+  .howto code{font-family:var(--font-mono);font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ニューラルネットワークの中身をのぞく</h1>
+  <p class="lede">2入力の小さなニューラルネットワークが2クラス分類を学習する過程を、重み・活性値・決定境界のリアルタイム表示で観察する。</p>
+
+  <h2 class="sr-only">左にネットワーク図（線の太さと色が重み、丸の中の数字が活性値）、右に入力平面（決定境界と学習データ、ドラッグ可能なプローブ点）と損失曲線を表示する対話型教材</h2>
+
+  <main id="widget">
+    <div class="ctrl-grid">
+      <div>
+        <p class="field-label">学習データ（2クラス分類）</p>
+        <div class="pipe" id="dsPills" role="group" aria-label="データセット選択">
+          <button class="pill on" data-ds="xor">XOR（市松）</button>
+          <button class="pill" data-ds="circle">同心円</button>
+          <button class="pill" data-ds="gauss">2クラスタ</button>
+          <button class="pill" data-ds="spiral">らせん</button>
+        </div>
+      </div>
+      <div>
+        <p class="field-label">隠れ層の活性化関数&nbsp;<span style="font-family:var(--font-mono);font-size:12px">a = f(Σ wᵢxᵢ + b)</span></p>
+        <div class="pipe" id="actPills" role="group" aria-label="活性化関数選択">
+          <button class="pill on" data-act="tanh">tanh</button>
+          <button class="pill" data-act="relu">ReLU</button>
+          <button class="pill" data-act="sigmoid">シグモイド</button>
+        </div>
+      </div>
+      <div class="ctrl"><label for="rLayers">隠れ層の数</label><input type="range" id="rLayers" min="1" max="3" step="1" value="2"><span class="val" id="vLayers">2</span></div>
+      <div class="ctrl"><label for="rNeurons">ニューロン / 層</label><input type="range" id="rNeurons" min="2" max="6" step="1" value="4"><span class="val" id="vNeurons">4</span></div>
+      <div class="ctrl"><label for="rLr">学習率</label><input type="range" id="rLr" min="0" max="4" step="1" value="3"><span class="val" id="vLr">0.3</span></div>
+    </div>
+
+    <div class="panels">
+      <div class="net-panel">
+        <canvas id="net" aria-label="ネットワーク図"></canvas>
+        <div class="legend">
+          <span><i class="sw pos"></i>正の重み</span>
+          <span><i class="sw neg"></i>負の重み</span>
+          <span>線の太さ = 重みの大きさ</span>
+          <span>丸の数字 = ● の点での活性値</span>
+        </div>
+        <p class="cap" id="hoverCap"><b>ニューロンにマウスを乗せる</b>と、右の平面がそのニューロンの活性化マップに切り替わります。</p>
+      </div>
+      <div class="data-panel">
+        <canvas id="plane" width="280" height="280" aria-label="入力平面と決定境界"></canvas>
+        <canvas id="loss" width="280" height="56" aria-label="損失曲線"></canvas>
+        <p class="cap">平面をクリック / ドラッグでプローブ ● を移動</p>
+      </div>
+    </div>
+
+    <div class="btns">
+      <button id="btnRun">▶ 学習</button>
+      <button id="btnStep">1ステップ</button>
+      <button id="btnReset">↺ 初期化</button>
+      <span class="status" id="stat">ステップ 0</span>
+    </div>
+
+    <div class="howto">
+      <b>見方・遊び方</b>
+      <ul>
+        <li>各ニューロンは <code>a = f(Σ wᵢxᵢ + b)</code> を計算します。前の層の出力に重み w を掛けて足し、活性化関数 f を通すだけ。これを積み重ねたものがニューラルネットワークです（出力層は常に tanh、ラベルは ±1）。</li>
+        <li>「▶ 学習」で勾配降下法（バックプロパゲーション）が動き、重み（線）が育っていく様子が見えます。「1ステップ」でコマ送りにできます。</li>
+        <li>右の平面の背景色はネットワークの出力（決定境界）。学習が進むとデータの色分けに沿っていきます。</li>
+        <li><b>ニューロンにホバー</b>すると、そのニューロンが入力平面のどこで強く反応するか（担当領域）が右に表示されます。浅い層は単純な直線的分割、深い層ほど複雑な形になるのが分かります。</li>
+        <li>XOR やらせんは直線1本では分けられない問題。隠れ層を 1 層・ニューロン 2 個まで減らすと失敗し、増やすと解けるようになる境目を探してみてください。</li>
+        <li>学習率を最大 (1.0) にすると発散・振動、最小 (0.01) にすると停滞します。損失曲線（右下）で確認できます。</li>
+      </ul>
+    </div>
+  </main>
+
+  <footer>順伝播・逆伝播をブラウザ内 JavaScript のみで計算（外部ライブラリ不使用）。全結合ネットワーク、損失は平均二乗誤差、最適化は全データ一括の勾配降下法。TensorFlow Playground に着想を得た教材。</footer>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const DOM=6;                       // 平面の座標範囲 [-DOM, DOM]
+  const LRS=[0.01,0.03,0.1,0.3,1.0];
+  const POS=[55,138,221], NEG=[211,84,58];   // 正/負の色（両テーマ共通）
+
+  // ---- 状態 ----
+  let hidden=2, perLayer=4, act='tanh', lrIdx=3, dsName='xor';
+  let sizes=[], W=[], B=[];          // W[l][j][i], B[l][j]
+  let data=[];
+  let probe={x:2.0,y:2.0};
+  let hover=null;                    // {l,j} 層番号(0=入力), ニューロン番号
+  let steps=0, lastLoss=NaN, lossHist=[];
+  let running=false, dirty=true;
+
+  // ---- 乱数・数学 ----
+  function randn(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+  function fAct(z){return act==='relu'?Math.max(0,z):act==='sigmoid'?1/(1+Math.exp(-z)):Math.tanh(z);}
+  function fPrime(z,a){return act==='relu'?(z>0?1:0):act==='sigmoid'?a*(1-a):1-a*a;}
+
+  // ---- ネットワーク ----
+  function initNet(){
+    sizes=[2]; for(let i=0;i<hidden;i++) sizes.push(perLayer); sizes.push(1);
+    W=[];B=[];
+    for(let l=1;l<sizes.length;l++){
+      const w=[],b=[];
+      for(let j=0;j<sizes[l];j++){
+        const row=[];
+        for(let i=0;i<sizes[l-1];i++) row.push(randn()*Math.sqrt(2/sizes[l-1]));
+        w.push(row); b.push(0);
+      }
+      W.push(w); B.push(b);
+    }
+    steps=0; lastLoss=NaN; lossHist=[]; dirty=true;
+  }
+
+  // 順伝播。as[0]=入力, as[L]=出力。出力層は常に tanh（ラベル±1に対応）
+  function forward(x){
+    const as=[x.slice()], zs=[];
+    for(let l=0;l<W.length;l++){
+      const z=[],a=[], last=(l===W.length-1);
+      for(let j=0;j<W[l].length;j++){
+        let s=B[l][j];
+        const row=W[l][j], prev=as[l];
+        for(let i=0;i<row.length;i++) s+=row[i]*prev[i];
+        z.push(s); a.push(last?Math.tanh(s):fAct(s));
+      }
+      zs.push(z); as.push(a);
+    }
+    return {as,zs};
+  }
+
+  // 全データ一括の勾配降下 1 ステップ。平均損失を返す
+  function trainStep(){
+    const gW=W.map(w=>w.map(r=>r.map(()=>0)));
+    const gB=B.map(b=>b.map(()=>0));
+    let loss=0;
+    for(const p of data){
+      const {as,zs}=forward([p.x/DOM,p.y/DOM]);
+      const out=as[as.length-1][0];
+      loss+=(out-p.label)*(out-p.label);
+      let delta=[(out-p.label)*(1-out*out)];
+      for(let l=W.length-1;l>=0;l--){
+        for(let j=0;j<W[l].length;j++){
+          gB[l][j]+=delta[j];
+          for(let i=0;i<W[l][j].length;i++) gW[l][j][i]+=delta[j]*as[l][i];
+        }
+        if(l>0){
+          const nd=new Array(sizes[l]).fill(0);
+          for(let i=0;i<sizes[l];i++){
+            let s=0;
+            for(let j=0;j<W[l].length;j++) s+=W[l][j][i]*delta[j];
+            nd[i]=s*fPrime(zs[l-1][i],as[l][i]);
+          }
+          delta=nd;
+        }
+      }
+    }
+    const lr=LRS[lrIdx]/data.length;
+    for(let l=0;l<W.length;l++)for(let j=0;j<W[l].length;j++){
+      B[l][j]-=lr*gB[l][j];
+      for(let i=0;i<W[l][j].length;i++) W[l][j][i]-=lr*gW[l][j][i];
+    }
+    steps++;
+    return loss/data.length;
+  }
+
+  function accuracy(){
+    let ok=0;
+    for(const p of data){
+      const {as}=forward([p.x/DOM,p.y/DOM]);
+      if((as[as.length-1][0]>=0?1:-1)===p.label) ok++;
+    }
+    return ok/data.length;
+  }
+
+  // ---- データセット ----
+  function genData(){
+    data=[]; const N=100;
+    if(dsName==='xor'){
+      for(let i=0;i<2*N;i++){
+        let x=Math.random()*9.6-4.8, y=Math.random()*9.6-4.8;
+        x+=x>0?0.4:-0.4; y+=y>0?0.4:-0.4;
+        data.push({x,y,label:x*y>0?1:-1});
+      }
+    }else if(dsName==='circle'){
+      for(let i=0;i<N;i++){const r=Math.random()*2.1, t=Math.random()*2*Math.PI;
+        data.push({x:r*Math.cos(t),y:r*Math.sin(t),label:1});}
+      for(let i=0;i<N;i++){const r=3.2+Math.random()*1.6, t=Math.random()*2*Math.PI;
+        data.push({x:r*Math.cos(t),y:r*Math.sin(t),label:-1});}
+    }else if(dsName==='gauss'){
+      for(let i=0;i<N;i++) data.push({x:2.3+randn(),y:2.3+randn(),label:1});
+      for(let i=0;i<N;i++) data.push({x:-2.3+randn(),y:-2.3+randn(),label:-1});
+    }else{ // spiral
+      for(let s=0;s<2;s++)for(let i=0;i<N;i++){
+        const r=i/N*4.6, t=1.75*(i/N)*2*Math.PI+(s?Math.PI:0);
+        data.push({x:r*Math.sin(t)+randn()*0.18,y:r*Math.cos(t)+randn()*0.18,label:s?1:-1});
+      }
+    }
+  }
+
+  // ---- 描画ユーティリティ ----
+  function cssVar(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim();}
+  function setupCanvas(cv){
+    const dpr=window.devicePixelRatio||1;
+    const w=cv.clientWidth, h=cv.clientHeight;
+    if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){
+      cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    }
+    const ctx=cv.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h};
+  }
+  function mix(c,alpha){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+alpha+')';}
+
+  // ---- ネットワーク図 ----
+  const netCv=$('net');
+  function neuronPos(w,h){
+    const L=sizes.length, padX=54, padY=26;
+    const pos=[];
+    for(let l=0;l<L;l++){
+      const x=padX+(w-2*padX)*(L===1?0.5:l/(L-1));
+      const n=sizes[l], span=Math.min(52*(n-1),h-2*padY);
+      const col=[];
+      for(let j=0;j<n;j++){
+        const y=h/2+(n===1?0:(j-(n-1)/2)*(n===1?0:span/(n-1||1)));
+        col.push({x,y});
+      }
+      pos.push(col);
+    }
+    return pos;
+  }
+  function drawNet(){
+    const {ctx,w,h}=setupCanvas(netCv);
+    ctx.clearRect(0,0,w,h);
+    const pos=neuronPos(w,h);
+    const probeActs=forward([probe.x/DOM,probe.y/DOM]).as;
+    const textPri=cssVar('--text-primary'), textMut=cssVar('--text-muted');
+    const surface2=cssVar('--surface-2'), borderS=cssVar('--border-strong');
+
+    // 最大重み（線の太さの正規化用）
+    let maxW=1e-6;
+    for(const wl of W)for(const row of wl)for(const v of row) maxW=Math.max(maxW,Math.abs(v));
+
+    // 結線
+    for(let l=0;l<W.length;l++){
+      for(let j=0;j<W[l].length;j++){
+        for(let i=0;i<W[l][j].length;i++){
+          const v=W[l][j][i];
+          ctx.beginPath();
+          ctx.moveTo(pos[l][i].x,pos[l][i].y);
+          ctx.lineTo(pos[l+1][j].x,pos[l+1][j].y);
+          ctx.lineWidth=0.4+3.2*Math.abs(v)/maxW;
+          ctx.strokeStyle=mix(v>=0?POS:NEG,0.28+0.5*Math.abs(v)/maxW);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // ニューロン
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const R=15;
+    for(let l=0;l<sizes.length;l++){
+      for(let j=0;j<sizes[l];j++){
+        const p=pos[l][j];
+        const a=probeActs[l][j];
+        const sv=Math.tanh(a);                    // ReLU 等の非有界値も [-1,1] に圧縮して着色
+        ctx.beginPath(); ctx.arc(p.x,p.y,R,0,2*Math.PI);
+        ctx.fillStyle=surface2; ctx.fill();
+        ctx.fillStyle=mix(sv>=0?POS:NEG,Math.min(1,Math.abs(sv))*0.55);
+        ctx.fill();
+        const isHover=hover&&hover.l===l&&hover.j===j;
+        ctx.lineWidth=isHover?2.5:1;
+        ctx.strokeStyle=isHover?cssVar('--border-accent'):borderS;
+        ctx.stroke();
+        ctx.fillStyle=textPri;
+        ctx.font='10px '+(cssVar('--font-mono')||'monospace');
+        const t=(a>=0?'':'−')+Math.abs(a).toFixed(2);
+        ctx.fillText(t,p.x,p.y);
+      }
+    }
+
+    // 層ラベル
+    ctx.fillStyle=textMut;
+    ctx.font='11px '+(cssVar('--font-sans')||'sans-serif');
+    const labels=['入力'];
+    for(let i=1;i<sizes.length-1;i++) labels.push('隠れ層'+(sizes.length>3?' '+i:''));
+    labels.push('出力');
+    for(let l=0;l<sizes.length;l++) ctx.fillText(labels[l],pos[l][0].x,14);
+    // 入出力の変数名
+    ctx.fillText('x₁',pos[0][0].x-R-14,pos[0][0].y);
+    ctx.fillText('x₂',pos[0][1].x-R-14,pos[0][1].y);
+    const op=pos[sizes.length-1][0];
+    ctx.fillText('ŷ',op.x+R+13,op.y);
+  }
+
+  // ネットワーク図のホバー判定
+  function netHitTest(ev){
+    const rect=netCv.getBoundingClientRect();
+    const mx=ev.clientX-rect.left, my=ev.clientY-rect.top;
+    const pos=neuronPos(rect.width,rect.height);
+    for(let l=0;l<pos.length;l++)for(let j=0;j<pos[l].length;j++){
+      const dx=mx-pos[l][j].x, dy=my-pos[l][j].y;
+      if(dx*dx+dy*dy<=19*19) return {l,j};
+    }
+    return null;
+  }
+  netCv.addEventListener('pointermove',ev=>{
+    const h=netHitTest(ev);
+    const same=(h===null&&hover===null)||(h&&hover&&h.l===hover.l&&h.j===hover.j);
+    if(!same){hover=h; dirty=true; updateHoverCap();}
+    netCv.style.cursor=h?'pointer':'default';
+  });
+  netCv.addEventListener('pointerleave',()=>{if(hover){hover=null;dirty=true;updateHoverCap();}});
+  function updateHoverCap(){
+    const el=$('hoverCap');
+    if(!hover){el.innerHTML='<b>ニューロンにマウスを乗せる</b>と、右の平面がそのニューロンの活性化マップに切り替わります。'; return;}
+    const name=hover.l===0?('入力 x'+(hover.j+1)):hover.l===sizes.length-1?'出力 ŷ':('隠れ層'+hover.l+' の #'+(hover.j+1));
+    el.innerHTML='右の平面に <b>'+name+'</b> の活性化マップを表示中（青 = 正に反応、赤 = 負に反応）。';
+  }
+
+  // ---- 入力平面 ----
+  const planeCv=$('plane');
+  const G=46;                                   // ヒートマップ解像度
+  const off=document.createElement('canvas'); off.width=G; off.height=G;
+  function d2c(v,size){return (v+DOM)/(2*DOM)*size;}       // 座標→キャンバス
+  function c2d(px,size){return px/size*2*DOM-DOM;}
+  function heatValue(gx,gy){
+    const {as}=forward([gx/DOM,gy/DOM]);
+    let v;
+    if(hover) v=as[hover.l][hover.j]; else v=as[as.length-1][0];
+    return Math.tanh(v);                        // 非有界の活性も表示用に圧縮
+  }
+  function drawPlane(){
+    const {ctx,w,h}=setupCanvas(planeCv);
+    ctx.clearRect(0,0,w,h);
+    // ヒートマップ
+    const img=off.getContext('2d').createImageData(G,G);
+    for(let r=0;r<G;r++){
+      const gy=DOM-(r+0.5)/G*2*DOM;             // 上が +y
+      for(let c=0;c<G;c++){
+        const gx=(c+0.5)/G*2*DOM-DOM;
+        const v=heatValue(gx,gy);
+        const col=v>=0?POS:NEG;
+        const k=(r*G+c)*4;
+        img.data[k]=col[0]; img.data[k+1]=col[1]; img.data[k+2]=col[2];
+        img.data[k+3]=Math.round(Math.min(1,Math.abs(v))*120);
+      }
+    }
+    off.getContext('2d').putImageData(img,0,0);
+    ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(off,0,0,w,h);
+    // 軸
+    ctx.strokeStyle=cssVar('--border'); ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(d2c(0,w),0); ctx.lineTo(d2c(0,w),h);
+    ctx.moveTo(0,d2c(0,h)); ctx.lineTo(w,d2c(0,h));
+    ctx.stroke();
+    // データ点
+    for(const p of data){
+      const x=d2c(p.x,w), y=h-d2c(p.y,h);
+      ctx.beginPath(); ctx.arc(x,y,3.2,0,2*Math.PI);
+      ctx.fillStyle=mix(p.label>0?POS:NEG,0.95); ctx.fill();
+      ctx.lineWidth=0.8; ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.stroke();
+    }
+    // プローブ
+    const px=d2c(probe.x,w), py=h-d2c(probe.y,h);
+    ctx.beginPath(); ctx.arc(px,py,6.5,0,2*Math.PI);
+    ctx.fillStyle='rgba(255,255,255,.92)'; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,.75)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(px,py,2,0,2*Math.PI);
+    ctx.fillStyle='rgba(0,0,0,.75)'; ctx.fill();
+  }
+  let draggingProbe=false;
+  function movProbe(ev){
+    const rect=planeCv.getBoundingClientRect();
+    const x=c2d(ev.clientX-rect.left,rect.width);
+    const y=-c2d(ev.clientY-rect.top,rect.height);
+    probe.x=Math.max(-DOM,Math.min(DOM,x));
+    probe.y=Math.max(-DOM,Math.min(DOM,y));
+    dirty=true;
+  }
+  planeCv.addEventListener('pointerdown',ev=>{draggingProbe=true;planeCv.setPointerCapture(ev.pointerId);movProbe(ev);});
+  planeCv.addEventListener('pointermove',ev=>{if(draggingProbe)movProbe(ev);});
+  planeCv.addEventListener('pointerup',()=>{draggingProbe=false;});
+
+  // ---- 損失曲線 ----
+  const lossCv=$('loss');
+  function drawLoss(){
+    const {ctx,w,h}=setupCanvas(lossCv);
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle=cssVar('--text-muted');
+    ctx.font='10px '+(cssVar('--font-sans')||'sans-serif');
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('損失（平均二乗誤差）',6,4);
+    if(lossHist.length<2) return;
+    const view=lossHist.slice(-240);
+    let maxV=0; for(const v of view) maxV=Math.max(maxV,v);
+    if(maxV<=0) maxV=1;
+    ctx.beginPath();
+    for(let i=0;i<view.length;i++){
+      const x=4+(w-8)*i/(view.length-1);
+      const y=h-4-(h-20)*(view[i]/maxV);
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.lineWidth=1.5; ctx.strokeStyle=cssVar('--border-accent'); ctx.stroke();
+  }
+
+  // ---- ステータス ----
+  function updateStat(){
+    let s='ステップ '+steps.toLocaleString();
+    if(!isNaN(lastLoss)) s+=' ・ 損失 '+lastLoss.toFixed(4)+' ・ 正解率 '+Math.round(accuracy()*100)+'%';
+    $('stat').textContent=s;
+  }
+
+  // ---- メインループ ----
+  const STEPS_PER_FRAME=8;
+  function frame(){
+    if(running){
+      let L=0;
+      for(let i=0;i<STEPS_PER_FRAME;i++) L=trainStep();
+      lastLoss=L; lossHist.push(L); dirty=true;
+    }
+    if(dirty){
+      drawNet(); drawPlane(); drawLoss(); updateStat();
+      dirty=false;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---- UI 結線 ----
+  function pills(containerId,attr,cb){
+    const box=$(containerId);
+    box.addEventListener('click',ev=>{
+      const b=ev.target.closest('.pill'); if(!b) return;
+      box.querySelectorAll('.pill').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      cb(b.dataset[attr]);
+    });
+  }
+  pills('dsPills','ds',v=>{dsName=v; genData(); initNet();});
+  pills('actPills','act',v=>{act=v; initNet();});
+  $('rLayers').addEventListener('input',e=>{hidden=+e.target.value;$('vLayers').textContent=hidden;hover=null;initNet();updateHoverCap();});
+  $('rNeurons').addEventListener('input',e=>{perLayer=+e.target.value;$('vNeurons').textContent=perLayer;hover=null;initNet();updateHoverCap();});
+  $('rLr').addEventListener('input',e=>{lrIdx=+e.target.value;$('vLr').textContent=LRS[lrIdx];});
+  $('btnRun').addEventListener('click',()=>{
+    running=!running;
+    $('btnRun').textContent=running?'⏸ 停止':'▶ 学習';
+  });
+  $('btnStep').addEventListener('click',()=>{lastLoss=trainStep();lossHist.push(lastLoss);dirty=true;});
+  $('btnReset').addEventListener('click',()=>{initNet();});
+  window.addEventListener('resize',()=>{dirty=true;});
+  if(window.matchMedia){
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{dirty=true;});
+  }
+
+  // ---- 起動 ----
+  genData(); initNet(); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
