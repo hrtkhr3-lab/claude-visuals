@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIは二進数でできている — さわって学ぶ教材</title>
+<style>
+  :root{
+    --surface-0:#f5f4ee; --surface-1:#ecebe3; --surface-2:#ffffff;
+    --text-primary:#1f1e1b; --text-secondary:#5f5e5a; --text-muted:#8a8981;
+    --border:rgba(0,0,0,.10); --border-strong:rgba(0,0,0,.20);
+    --bg-accent:#e6f1fb; --text-accent:#185fa5; --border-accent:#378add;
+    --text-success:#3b6d11;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,"Roboto Mono",monospace;
+    --radius:8px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-0:#262624; --surface-1:#302f2d; --surface-2:#3a3a37;
+      --text-primary:#e9e7de; --text-secondary:#b1afa5; --text-muted:#85847c;
+      --border:rgba(255,255,255,.14); --border-strong:rgba(255,255,255,.26);
+      --bg-accent:#0c447c; --text-accent:#b5d4f4; --border-accent:#378add;
+      --text-success:#97c459;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font-family:var(--font-sans);line-height:1.7;
+    -webkit-font-smoothing:antialiased;padding:32px 16px}
+  .wrap{max-width:720px;margin:0 auto}
+  h1{font-size:22px;font-weight:500;margin:0 0 4px}
+  .lede{font-size:14px;color:var(--text-secondary);margin:0 0 24px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+  .pipe{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 20px}
+  .pill{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--surface-1);color:var(--text-secondary);white-space:nowrap;transition:background .2s,color .2s}
+  .pill.on{background:var(--bg-accent);color:var(--text-accent)}
+  .sep{color:var(--text-muted);font-size:12px}
+
+  .ctrl{display:flex;align-items:center;gap:12px;margin:10px 0;font-size:13px;color:var(--text-secondary)}
+  .ctrl>label{min-width:78px}
+  .ctrl .val{min-width:56px;text-align:right;font-weight:500;color:var(--text-primary);font-family:var(--font-mono)}
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:2px;background:var(--border-strong);outline:none;margin:0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px var(--bg-accent)}
+
+  button{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:14px;padding:8px 14px;border-radius:var(--radius);background:transparent;color:var(--text-primary);border:.5px solid var(--border-strong);cursor:pointer;transition:background .15s,transform .05s}
+  button:hover{background:var(--surface-1)}
+  button:active{transform:scale(.98)}
+
+  footer{margin-top:28px;font-size:12px;color:var(--text-muted);border-top:.5px solid var(--border);padding-top:12px}
+
+  /* ── 教材固有 ─────────────────────────────── */
+  section.step{background:var(--surface-2);border:.5px solid var(--border);border-radius:var(--radius);padding:20px 20px 18px;margin:0 0 18px}
+  section.step h2{font-size:16px;font-weight:600;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .stepnum{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--bg-accent);color:var(--text-accent);font-size:12px;font-weight:600;flex:none}
+  section.step .desc{font-size:13px;color:var(--text-secondary);margin:0 0 14px}
+  .hint{font-size:12px;color:var(--text-muted);margin:8px 0 0}
+  .mono{font-family:var(--font-mono)}
+
+  /* ビットスイッチ */
+  .bitrow{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px}
+  .bitcell{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .bit{width:44px;height:44px;border-radius:var(--radius);border:1px solid var(--border-strong);
+    background:var(--surface-1);color:var(--text-muted);font-family:var(--font-mono);font-size:20px;font-weight:600;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;user-select:none;
+    transition:background .15s,color .15s,border-color .15s}
+  .bit.on{background:var(--bg-accent);color:var(--text-accent);border-color:var(--border-accent)}
+  .bit:focus-visible{outline:none;box-shadow:0 0 0 3px var(--bg-accent)}
+  .bitpow{font-size:10px;color:var(--text-muted);font-family:var(--font-mono)}
+  .bigval{font-size:15px;margin:8px 0 0}
+  .bigval strong{font-size:24px;font-weight:600;color:var(--text-accent);font-family:var(--font-mono)}
+  .expr{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);margin:4px 0 0;word-break:break-all}
+
+  /* テキスト入力 */
+  input[type=text]{font:inherit;font-size:15px;width:100%;padding:8px 12px;border-radius:var(--radius);
+    border:.5px solid var(--border-strong);background:var(--surface-0);color:var(--text-primary)}
+  input[type=text]:focus-visible{outline:none;box-shadow:0 0 0 3px var(--bg-accent)}
+  table.enc{width:100%;border-collapse:collapse;margin:12px 0 0;font-size:13px}
+  table.enc th{text-align:left;font-weight:500;color:var(--text-muted);font-size:11px;padding:4px 8px;border-bottom:.5px solid var(--border)}
+  table.enc td{padding:6px 8px;border-bottom:.5px solid var(--border);vertical-align:top}
+  table.enc td.ch{font-size:17px;font-weight:600}
+  table.enc .bin{font-family:var(--font-mono);font-size:12px;color:var(--text-accent);word-break:break-all}
+  table.enc .num{font-family:var(--font-mono);color:var(--text-secondary)}
+
+  /* トークンチップ */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+  .chip{font-size:14px;padding:6px 12px;border-radius:999px;border:.5px solid var(--border-strong);background:var(--surface-0);cursor:pointer;transition:background .15s}
+  .chip:hover{background:var(--surface-1)}
+  .sentence{min-height:44px;border:1px dashed var(--border-strong);border-radius:var(--radius);padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--surface-0)}
+  .tok{display:flex;flex-direction:column;align-items:center;gap:1px;background:var(--bg-accent);border-radius:6px;padding:4px 8px;cursor:pointer}
+  .tok .w{font-size:14px;color:var(--text-accent);font-weight:600}
+  .tok .id{font-size:10px;color:var(--text-accent);font-family:var(--font-mono);opacity:.8}
+  .sentence .ph{font-size:12px;color:var(--text-muted)}
+  .idbits{margin:12px 0 0;font-family:var(--font-mono);font-size:12px;line-height:2}
+  .idbits .b{color:var(--text-accent)}
+
+  /* float32 */
+  .f32row{display:flex;flex-wrap:wrap;gap:3px;margin:10px 0 4px}
+  .fbit{width:19px;height:26px;border-radius:4px;border:1px solid var(--border);background:var(--surface-1);
+    color:var(--text-muted);font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;user-select:none;padding:0}
+  .fbit.on{color:var(--text-primary);font-weight:700}
+  .fbit.sign{border-bottom:3px solid #c0392b}
+  .fbit.exp{border-bottom:3px solid var(--border-accent)}
+  .fbit.man{border-bottom:3px solid var(--text-success)}
+  .fbit.on.sign{background:rgba(192,57,43,.15)}
+  .fbit.on.exp{background:var(--bg-accent)}
+  .fbit.on.man{background:rgba(120,180,60,.18)}
+  .f32legend{display:flex;gap:16px;font-size:11px;color:var(--text-muted);margin:2px 0 0;flex-wrap:wrap}
+  .f32legend .k{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+
+  /* ニューロン */
+  .neuron-out{font-family:var(--font-mono);font-size:14px;background:var(--surface-0);border:.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin:10px 0 0;overflow-x:auto;white-space:nowrap}
+  .neuron-out strong{color:var(--text-accent)}
+  .outbits{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);margin:6px 0 0;word-break:break-all}
+  .outbits .b{color:var(--text-accent)}
+
+  /* 規模 */
+  .segbtns{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 6px}
+  .segbtns button{font-size:13px;padding:6px 12px}
+  .segbtns button.on{background:var(--bg-accent);color:var(--text-accent);border-color:var(--border-accent)}
+  .scale-out{font-size:14px;margin:12px 0 0}
+  .scale-out strong{font-size:22px;font-family:var(--font-mono);color:var(--text-accent)}
+  .scale-bar{height:14px;border-radius:7px;background:var(--surface-1);border:.5px solid var(--border);overflow:hidden;margin:10px 0 4px}
+  .scale-bar>div{height:100%;background:var(--border-accent);border-radius:7px;transition:width .2s;min-width:2px}
+  .scale-note{font-size:12px;color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AIは二進数でできている</h1>
+  <p class="lede">文字も、AIの中身の数値（重み）も、計算も、すべては 0 と 1 の列。ビットをさわりながら、AIが二進数でどう構成されているかを6ステップで学ぶ教材。</p>
+
+  <div class="pipe" aria-hidden="true">
+    <span class="pill on">① ビット</span><span class="sep">→</span>
+    <span class="pill on">② 文字を数に</span><span class="sep">→</span>
+    <span class="pill on">③ トークンID</span><span class="sep">→</span>
+    <span class="pill on">④ 重み（小数）</span><span class="sep">→</span>
+    <span class="pill on">⑤ ニューロン計算</span><span class="sep">→</span>
+    <span class="pill on">⑥ 規模</span>
+  </div>
+
+  <h2 class="sr-only">ビット操作・文字エンコード・トークン化・浮動小数点・ニューロン計算・モデル規模を対話的に体験する教材</h2>
+
+  <main id="widget">
+
+    <!-- ① ビット -->
+    <section class="step" id="s1">
+      <h2><span class="stepnum">1</span>すべての出発点 — ビット（0 と 1）</h2>
+      <p class="desc">コンピュータが記憶できる最小単位が <b>ビット</b>。8個並べた「1バイト」で 0〜255 の数を表せる。<b>マスをクリック</b>して 0/1 を切り替えてみよう。</p>
+      <div class="bitrow" id="byteBits"></div>
+      <p class="bigval">10進数では <strong id="byteVal">0</strong></p>
+      <p class="expr" id="byteExpr"></p>
+      <p class="hint">各マスの下の数字は「その桁の重み（2のべき乗）」。1 になっている桁の重みを足すと10進数の値になる。</p>
+    </section>
+
+    <!-- ② 文字 -->
+    <section class="step" id="s2">
+      <h2><span class="stepnum">2</span>文字も二進数 — テキストのエンコード</h2>
+      <p class="desc">AIに入る文章も、まず数値の列に変換される。<b>好きな文字を入力</b>すると、各文字の文字コード（Unicode）と、実際にメモリに置かれる二進数（UTF-8）が見える。</p>
+      <input type="text" id="encInput" value="AIは0と1" maxlength="12" aria-label="エンコードする文字列">
+      <table class="enc" aria-live="polite">
+        <thead><tr><th>文字</th><th>Unicode（10進）</th><th>UTF-8 の二進数表現</th></tr></thead>
+        <tbody id="encBody"></tbody>
+      </table>
+      <p class="hint">日本語1文字は3バイト（24ビット）、英数字は1バイト（8ビット）。この0/1の列がAIへの入力の正体。</p>
+    </section>
+
+    <!-- ③ トークン -->
+    <section class="step" id="s3">
+      <h2><span class="stepnum">3</span>AIは単語を「トークンID」という番号で扱う</h2>
+      <p class="desc">ChatGPTのようなAI（大規模言語モデル）は、文章を<b>トークン</b>という単位に区切り、それぞれに番号（ID）を割り当てて処理する。<b>下の単語をクリック</b>して文を作ってみよう。</p>
+      <div class="chips" id="vocabChips"></div>
+      <div class="sentence" id="sentBox" aria-live="polite"><span class="ph">↑ 単語をクリックすると文がここに並ぶ（トークンをクリックで削除）</span></div>
+      <div class="idbits" id="sentBits"></div>
+      <p class="hint">AIの内部では文章は「ID番号の列」＝「二進数の列」でしかない。実際のAIは数万〜数十万語の語彙表を持つ。</p>
+    </section>
+
+    <!-- ④ float32 -->
+    <section class="step" id="s4">
+      <h2><span class="stepnum">4</span>AIの「重み」は小数 — 32ビットの浮動小数点数</h2>
+      <p class="desc">AIの賢さの正体は、学習で調整された大量の小数（<b>重み・パラメータ</b>）。1個の重みは通常32ビットで表される。<b>スライダーで値を変える</b>か、<b>ビットを直接クリック</b>して、小数と0/1の対応を確かめよう。</p>
+      <div class="ctrl">
+        <label for="wSlider">重みの値</label>
+        <input type="range" id="wSlider" min="-2" max="2" step="0.01" value="0.75">
+        <span class="val" id="wVal">0.75</span>
+      </div>
+      <div class="f32row" id="f32row"></div>
+      <div class="f32legend">
+        <span><span class="k" style="background:#c0392b"></span>符号（＋/−）1ビット</span>
+        <span><span class="k" style="background:var(--border-accent)"></span>指数（桁の位置）8ビット</span>
+        <span><span class="k" style="background:var(--text-success)"></span>仮数（数字の並び）23ビット</span>
+      </div>
+      <p class="hint" id="f32note"></p>
+    </section>
+
+    <!-- ⑤ ニューロン -->
+    <section class="step" id="s5">
+      <h2><span class="stepnum">5</span>ニューロンの計算 — かけ算と足し算も二進数で</h2>
+      <p class="desc">AIの中身は「入力 × 重み を足し合わせる」だけの単純な計算（ニューロン）が何十億個も連なったもの。<b>スライダーを動かす</b>と出力が変わり、その出力もまた二進数であることが見える。</p>
+      <div class="ctrl"><label for="x1">入力 x₁</label><input type="range" id="x1" min="0" max="1" step="0.05" value="0.8"><span class="val" id="x1v">0.80</span></div>
+      <div class="ctrl"><label for="x2">入力 x₂</label><input type="range" id="x2" min="0" max="1" step="0.05" value="0.3"><span class="val" id="x2v">0.30</span></div>
+      <div class="ctrl"><label for="w1">重み w₁</label><input type="range" id="w1" min="-1" max="1" step="0.05" value="0.6"><span class="val" id="w1v">0.60</span></div>
+      <div class="ctrl"><label for="w2">重み w₂</label><input type="range" id="w2" min="-1" max="1" step="0.05" value="-0.4"><span class="val" id="w2v">-0.40</span></div>
+      <div class="neuron-out" id="neuronCalc"></div>
+      <div class="outbits" id="neuronBits"></div>
+      <p class="hint">ReLU は「マイナスなら0にする」活性化関数。この掛けて足すだけの演算を、GPUが二進数のまま超高速に繰り返している。</p>
+    </section>
+
+    <!-- ⑥ 規模 -->
+    <section class="step" id="s6">
+      <h2><span class="stepnum">6</span>規模を体感 — AI全体は何ビットか？</h2>
+      <p class="desc">ステップ④の32ビットの重みが、最新のAIには数十億〜数兆個ある。<b>パラメータ数と精度（1個あたりのビット数）を選ぶ</b>と、AI全体のデータ量がわかる。ビット数を減らす工夫が「量子化」。</p>
+      <div class="ctrl">
+        <label for="pSlider">パラメータ数</label>
+        <input type="range" id="pSlider" min="0" max="6" step="0.01" value="4">
+        <span class="val" id="pVal"></span>
+      </div>
+      <div class="segbtns" id="precBtns" role="group" aria-label="1パラメータあたりのビット数">
+        <button data-bits="32" class="on">32ビット (float32)</button>
+        <button data-bits="16">16ビット (float16)</button>
+        <button data-bits="8">8ビット (int8)</button>
+        <button data-bits="4">4ビット (int4)</button>
+      </div>
+      <p class="scale-out">AI全体のデータ量 ≈ <strong id="sizeVal"></strong></p>
+      <div class="scale-bar" aria-hidden="true"><div id="sizeBar"></div></div>
+      <p class="scale-note" id="sizeNote"></p>
+    </section>
+
+  </main>
+
+  <footer>教材：AIの内部表現（文字コード・トークンID・浮動小数点重み・積和演算・量子化）の入門用インタラクティブ可視化。数値・挙動はブラウザ内 JavaScript のみで計算しており、外部通信は行わない。トークンIDの語彙は説明用の架空の例。</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ── ① 8ビットスイッチ ─────────────────────── */
+  var byteState = [0,0,0,0,0,0,0,0]; // MSB→LSB
+  var byteRow = $("byteBits");
+  byteState.forEach(function(_, i){
+    var pow = 7 - i;
+    var cell = document.createElement("div"); cell.className = "bitcell";
+    var b = document.createElement("button");
+    b.className = "bit"; b.textContent = "0"; b.type = "button";
+    b.setAttribute("aria-label", "2の" + pow + "乗の桁");
+    b.addEventListener("click", function(){
+      byteState[i] ^= 1;
+      b.textContent = byteState[i];
+      b.classList.toggle("on", !!byteState[i]);
+      renderByte();
+    });
+    var p = document.createElement("span"); p.className = "bitpow"; p.textContent = Math.pow(2, pow);
+    cell.appendChild(b); cell.appendChild(p); byteRow.appendChild(cell);
+  });
+  function renderByte(){
+    var val = 0, terms = [];
+    byteState.forEach(function(v, i){ if(v){ var t = Math.pow(2, 7 - i); val += t; terms.push(t); } });
+    $("byteVal").textContent = val;
+    $("byteExpr").textContent = terms.length ? terms.join(" + ") + " = " + val : "すべて 0 なので 0";
+  }
+  renderByte();
+
+  /* ── ② UTF-8 エンコード ─────────────────────── */
+  var encoder = new TextEncoder();
+  function renderEnc(){
+    var text = $("encInput").value;
+    var body = $("encBody"); body.innerHTML = "";
+    Array.from(text).slice(0, 12).forEach(function(ch){
+      var bytes = encoder.encode(ch);
+      var bin = Array.from(bytes).map(function(b){ return b.toString(2).padStart(8, "0"); }).join(" ");
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td"); td1.className = "ch"; td1.textContent = ch === " " ? "␣" : ch;
+      var td2 = document.createElement("td"); td2.className = "num"; td2.textContent = ch.codePointAt(0);
+      var td3 = document.createElement("td"); td3.className = "bin"; td3.textContent = bin;
+      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+      body.appendChild(tr);
+    });
+  }
+  $("encInput").addEventListener("input", renderEnc);
+  renderEnc();
+
+  /* ── ③ トークンID ──────────────────────────── */
+  var vocab = [
+    {w:"AI",       id:1204},
+    {w:"は",       id:5},
+    {w:"二進数",   id:20481},
+    {w:"で",       id:12},
+    {w:"考える",   id:8930},
+    {w:"を",       id:9},
+    {w:"学ぶ",     id:15302},
+    {w:"人間",     id:733},
+    {w:"と",       id:8},
+    {w:"未来",     id:4671}
+  ];
+  var sent = [];
+  var chips = $("vocabChips");
+  vocab.forEach(function(v){
+    var c = document.createElement("button");
+    c.className = "chip"; c.type = "button";
+    c.textContent = v.w + " (" + v.id + ")";
+    c.addEventListener("click", function(){
+      if(sent.length < 8){ sent.push(v); renderSent(); }
+    });
+    chips.appendChild(c);
+  });
+  function renderSent(){
+    var box = $("sentBox"); box.innerHTML = "";
+    if(!sent.length){
+      var ph = document.createElement("span"); ph.className = "ph";
+      ph.textContent = "↑ 単語をクリックすると文がここに並ぶ（トークンをクリックで削除）";
+      box.appendChild(ph);
+    }
+    sent.forEach(function(v, i){
+      var t = document.createElement("button");
+      t.className = "tok"; t.type = "button";
+      t.setAttribute("aria-label", v.w + " を文から削除");
+      t.innerHTML = '<span class="w"></span><span class="id"></span>';
+      t.querySelector(".w").textContent = v.w;
+      t.querySelector(".id").textContent = "ID " + v.id;
+      t.addEventListener("click", function(){ sent.splice(i, 1); renderSent(); });
+      box.appendChild(t);
+    });
+    var bits = $("sentBits");
+    if(sent.length){
+      bits.innerHTML = "AIが実際に受け取る列：<br>" + sent.map(function(v){
+        return '<span class="b">' + v.id.toString(2).padStart(16, "0") + "</span>";
+      }).join(" ");
+    } else {
+      bits.textContent = "";
+    }
+  }
+  renderSent();
+
+  /* ── ④ float32 ビット ──────────────────────── */
+  var f32buf = new ArrayBuffer(4), f32dv = new DataView(f32buf);
+  function floatToBits(v){ f32dv.setFloat32(0, v); return f32dv.getUint32(0); }
+  function bitsToFloat(u){ f32dv.setUint32(0, u); return f32dv.getFloat32(0); }
+  var f32u = floatToBits(0.75);
+  var f32row = $("f32row"), fbits = [];
+  for(var i = 0; i < 32; i++){
+    (function(pos){ // pos: 31=符号 … 0=LSB
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "fbit " + (pos === 31 ? "sign" : pos >= 23 ? "exp" : "man");
+      b.setAttribute("aria-label", (pos === 31 ? "符号" : pos >= 23 ? "指数" : "仮数") + "ビット " + pos);
+      b.addEventListener("click", function(){
+        f32u = (f32u ^ (1 << pos)) >>> 0;
+        var v = bitsToFloat(f32u);
+        if(isFinite(v) && Math.abs(v) <= 2) $("wSlider").value = v;
+        renderF32();
+      });
+      f32row.appendChild(b); fbits.push(b);
+    })(31 - i);
+  }
+  function renderF32(){
+    for(var i = 0; i < 32; i++){
+      var on = (f32u >>> (31 - i)) & 1;
+      fbits[i].textContent = on;
+      fbits[i].classList.toggle("on", !!on);
+    }
+    var v = bitsToFloat(f32u);
+    var disp = isFinite(v) ? (Math.abs(v) >= 0.001 || v === 0 ? +v.toFixed(4) : v.toExponential(2)) : (isNaN(v) ? "NaN" : (v > 0 ? "∞" : "−∞"));
+    $("wVal").textContent = disp;
+    var note = "この32個の 0/1 が、重み「" + disp + "」のメモリ上の姿。";
+    if(!isFinite(v)) note += " 指数が全部1になると無限大や NaN（非数）という特別な値になる。";
+    else if(v !== 0 && Math.abs(v) < 1e-3) note += " とても小さい値も指数のおかげで表現できる。";
+    $("f32note").textContent = note;
+  }
+  $("wSlider").addEventListener("input", function(){
+    f32u = floatToBits(parseFloat(this.value));
+    renderF32();
+  });
+  renderF32();
+
+  /* ── ⑤ ニューロン ──────────────────────────── */
+  function fmt(v){ return (v < 0 ? "" : "") + v.toFixed(2); }
+  function renderNeuron(){
+    var x1 = parseFloat($("x1").value), x2 = parseFloat($("x2").value);
+    var w1 = parseFloat($("w1").value), w2 = parseFloat($("w2").value);
+    $("x1v").textContent = fmt(x1); $("x2v").textContent = fmt(x2);
+    $("w1v").textContent = fmt(w1); $("w2v").textContent = fmt(w2);
+    var sum = x1 * w1 + x2 * w2;
+    var y = Math.max(0, sum);
+    $("neuronCalc").innerHTML =
+      "y = ReLU(x₁×w₁ + x₂×w₂) = ReLU(" +
+      fmt(x1) + "×" + fmt(w1) + " + " + fmt(x2) + "×" + fmt(w2) + ") = ReLU(" +
+      sum.toFixed(3) + ") = <strong>" + y.toFixed(3) + "</strong>";
+    var bits = floatToBits(y).toString(2).padStart(32, "0");
+    $("neuronBits").innerHTML = "出力 y のメモリ上の姿（float32）： <span class=\"b\">" +
+      bits.slice(0,1) + " " + bits.slice(1,9) + " " + bits.slice(9) + "</span>";
+  }
+  ["x1","x2","w1","w2"].forEach(function(id){ $(id).addEventListener("input", renderNeuron); });
+  renderNeuron();
+
+  /* ── ⑥ 規模 ────────────────────────────────── */
+  var precBits = 32;
+  var MAX_BYTES = 2e12 * 4; // バーの最大 = 2兆パラメータ × 4バイト
+  function humanParams(n){
+    if(n >= 1e12) return (n/1e12 >= 10 ? Math.round(n/1e12) : +(n/1e12).toFixed(1)) + "兆";
+    if(n >= 1e8)  return (n/1e8  >= 10 ? Math.round(n/1e8)  : +(n/1e8).toFixed(1))  + "億";
+    if(n >= 1e4)  return Math.round(n/1e4) + "万";
+    return Math.round(n) + "";
+  }
+  function humanBytes(b){
+    if(b >= 1e12) return +(b/1e12).toFixed(2) + " TB";
+    if(b >= 1e9)  return +(b/1e9).toFixed(2)  + " GB";
+    if(b >= 1e6)  return +(b/1e6).toFixed(2)  + " MB";
+    if(b >= 1e3)  return +(b/1e3).toFixed(1)  + " KB";
+    return Math.round(b) + " バイト";
+  }
+  function renderScale(){
+    var params = Math.pow(10, 6 + parseFloat($("pSlider").value)); // 10^6〜10^12
+    var bitsTotal = params * precBits;
+    var bytes = bitsTotal / 8;
+    $("pVal").textContent = humanParams(params);
+    $("sizeVal").textContent = humanBytes(bytes);
+    $("sizeBar").style.width = Math.min(100, Math.pow(bytes / MAX_BYTES, 0.4) * 100) + "%";
+    var films = bytes / 4.7e9; // DVD 1枚 ≈ 4.7GB
+    var note = "= 二進数の 0/1 が約 " + humanParams(bitsTotal) + " 個。";
+    if(bytes >= 4.7e9) note += " DVD約" + Math.round(films) + "枚分。";
+    if(precBits < 32) note += " 32ビットに比べ " + (32/precBits) + " 分の1に圧縮（量子化）。精度はわずかに下がるが動作は軽くなる。";
+    $("sizeNote").textContent = note;
+  }
+  $("pSlider").addEventListener("input", renderScale);
+  Array.prototype.forEach.call($("precBtns").querySelectorAll("button"), function(btn){
+    btn.addEventListener("click", function(){
+      precBits = +btn.dataset.bits;
+      Array.prototype.forEach.call($("precBtns").querySelectorAll("button"), function(b){
+        b.classList.toggle("on", b === btn);
+      });
+      renderScale();
+    });
+  });
+  renderScale();
+})();
+</script>
+</body>
+</html>
