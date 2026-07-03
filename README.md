@@ -5,6 +5,21 @@
 
 🔗 **公開ギャラリー:** https://hrtkhr3-lab.github.io/claude-visuals/
 
+## 収録されている可視化物
+
+| 単元 | タイトル | 内容 |
+|---|---|---|
+| 距離・類似度の可視化 | [ユークリッド距離：まっすぐ測る](https://hrtkhr3-lab.github.io/claude-visuals/visuals/euclidean-distance.html) | 2点を直線で結んだ長さ。ピタゴラスの定理で決まる基本の距離。点をドラッグ。 |
+| 距離・類似度の可視化 | [マンハッタン距離：碁盤の目で測る](https://hrtkhr3-lab.github.io/claude-visuals/visuals/manhattan-distance.html) | 縦横にしか進めないタクシーの道のり。どのルートでも長さは同じ。 |
+| 距離・類似度の可視化 | [コサイン類似度：角度で比べる](https://hrtkhr3-lab.github.io/claude-visuals/visuals/cosine-similarity.html) | 2ベクトルのなす角度で似ている度合いを測る。矢印の先端をドラッグ。 |
+| 距離・類似度の可視化 | [DTW vs ユークリッド距離](https://hrtkhr3-lab.github.io/claude-visuals/visuals/dtw-vs-euclidean.html) | 速さの違う2波形を対応づけ、時間ズレへの強さの違いを可視化。 |
+| クラスタリング | [k-means クラスタリング](https://hrtkhr3-lab.github.io/claude-visuals/visuals/kmeans-clustering.html) | 割り当てと中心更新の反復でグループを見つける。点を追加できる。 |
+| 大規模言語モデル（LLM） | [LLMの自己回帰的生成ループ](https://hrtkhr3-lab.github.io/claude-visuals/visuals/llm-generation-loop.html) | 順伝播→ロジット→softmax・温度→top-p→サンプリングを1トークンずつ実行。 |
+| ニューラルネットワーク | [ニューラルネットワークの中身をのぞく](https://hrtkhr3-lab.github.io/claude-visuals/visuals/neural-network-playground.html) | 小さなNNが2クラス分類を学習する過程を、重み・活性値・決定境界のリアルタイム表示で観察。 |
+| その他 | [AIは二進数でできている](https://hrtkhr3-lab.github.io/claude-visuals/visuals/ai-binary-basics.html) | 文字も重みも計算も 0 と 1 の列。AIが二進数でどう構成されるかを6ステップで学ぶ。 |
+
+> この表は手動メンテナンス。単元別に自動整列されたカード一覧は[公開ギャラリー](https://hrtkhr3-lab.github.io/claude-visuals/)を参照。
+
 ## 特徴
 
 - **standalone**: 各可視化物は1枚の HTML で完結。外部フォント / CDN / 外部スクリプトに依存しない。
@@ -16,7 +31,9 @@
 ```
 claude-visuals/
   visuals/                     # 1可視化物 = 1 standalone .html（ここだけ手で足す）
-    llm-generation-loop.html
+    euclidean-distance.html
+    neural-network-playground.html
+    …                          # 上記「収録されている可視化物」を参照
   template.html                # 新規作成用の空シェル（型）
   scripts/build-index.mjs      # visuals/ を走査して index.html を再生成（依存ゼロ）
   index.html                   # ★自動生成。手で編集しない
